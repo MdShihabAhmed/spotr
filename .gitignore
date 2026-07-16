@@ -1,5 +1,16 @@
+# backend
 .env
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+
+# frontend
+node_modules/
+dist/
+.env.local
+*.local
+
+# editors
 .idea/
+.vscode/
