@@ -1,30 +1,45 @@
-import { useQuery } from '@tanstack/react-query'
-import { api } from './lib/api'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { Layout } from './components/Layout'
+import { ProtectedRoute } from './components/ProtectedRoute'
+import { AccountPage } from './pages/AccountPage'
+import { DashboardPage } from './pages/DashboardPage'
+import { LoginPage } from './pages/LoginPage'
+import { RegisterPage } from './pages/RegisterPage'
 import './App.css'
 
-type Health = { status: string }
-
-/**
- * Placeholder shell. Its only job today is to prove the frontend can reach the
- * backend across origins (i.e. CORS is configured) before any real UI exists.
- */
-function App() {
-  const { data, isPending, error } = useQuery({
-    queryKey: ['health'],
-    queryFn: () => api.get<Health>('/health'),
-  })
-
-  const backend = isPending
-    ? 'checking…'
-    : error
-      ? `unreachable — ${error.message}`
-      : (data?.status ?? '?')
-
+function Protected({ children }: { children: React.ReactNode }) {
   return (
-    <main>
-      <h1>CP Upsolving Mentor</h1>
-      <p>Backend: {backend}</p>
-    </main>
+    <ProtectedRoute>
+      <Layout>{children}</Layout>
+    </ProtectedRoute>
+  )
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route
+          path="/"
+          element={
+            <Protected>
+              <DashboardPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/account"
+          element={
+            <Protected>
+              <AccountPage />
+            </Protected>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   )
 }
 

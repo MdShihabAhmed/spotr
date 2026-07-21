@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from logging.config import fileConfig
 
 from alembic import context
@@ -50,4 +51,8 @@ async def run_migrations_online() -> None:
 if context.is_offline_mode():
     run_migrations_offline()
 else:
-    asyncio.run(run_migrations_online())
+    # psycopg's async driver drives the socket with add_reader/add_writer, which the
+    # ProactorEventLoop (the Windows default) does not implement. Force a selector
+    # loop there; every other platform already defaults to one.
+    loop_factory = asyncio.SelectorEventLoop if sys.platform == "win32" else None
+    asyncio.run(run_migrations_online(), loop_factory=loop_factory)

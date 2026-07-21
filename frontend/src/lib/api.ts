@@ -81,6 +81,23 @@ export const api = {
     }),
 };
 
+/** Mirrors backend UserOut. */
+export type User = {
+  id: number;
+  email: string;
+  cf_handle: string | null;
+  created_at: string;
+};
+
+export const getMe = () => api.get<User>("/me");
+
+export const register = (email: string, password: string) =>
+  api.post<User>("/register", { email, password });
+
+export function logout(): void {
+  tokens.clear();
+}
+
 /** /login is form-encoded (OAuth2PasswordRequestForm), unlike every other endpoint. */
 export async function login(email: string, password: string): Promise<void> {
   const resp = await fetch(`${BASE_URL}/login`, {

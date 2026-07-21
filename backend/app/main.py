@@ -19,7 +19,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="CP Upsolving Mentor",
+    title="ForcesAI",
     description="Graduated editorial hints, stress-test-verified pitfall checking, "
     "and practice recommendations for competitive programmers.",
     lifespan=lifespan,
