@@ -1,7 +1,7 @@
 [project]
-name = "cp-upsolving-mentor"
+name = "forcesai"
 version = "0.1.0"
-description = "AI-powered upsolving mentor for competitive programmers: graduated editorial hints, stress-test-verified pitfall checking, and practice recommendations."
+description = "ForcesAI — AI-powered upsolving mentor for competitive programmers: graduated editorial hints, stress-test-verified pitfall checking, and practice recommendations."
 requires-python = ">=3.14"
 dependencies = [
     "alembic>=1.18.5",
