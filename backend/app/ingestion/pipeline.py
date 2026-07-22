@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.cf_client import CodeforcesClient
@@ -33,11 +34,13 @@ from app.cf_scraper import (
 )
 from app.database import async_session_maker
 from app.ingestion.editorial_scraper import fetch_editorial_text
-from app.models import Problem
+from app.ingestion.hint_generator import HintGenerationError, generate_hints
+from app.models import EditorialHint, Problem
 
 CfClientFactory = Callable[[], CodeforcesClient]
 Scraper = Callable[[int, str], Awaitable[ScrapedStatement]]
 EditorialFetcher = Callable[[str], Awaitable[str | None]]
+HintGenerator = Callable[[Problem], Awaitable[list[str]]]
 
 
 async def run_ingestion(
@@ -47,6 +50,7 @@ async def run_ingestion(
     cf_client_factory: CfClientFactory = CodeforcesClient,
     scraper: Scraper = scrape_problem_statement,
     editorial_fetcher: EditorialFetcher = fetch_editorial_text,
+    hint_generator: HintGenerator = generate_hints,
 ) -> None:
     """Populate a `Problem` row's content, then mark it ready or failed."""
     async with session_maker() as db:
@@ -55,7 +59,9 @@ async def run_ingestion(
             return  # row deleted between scheduling and running — nothing to do
 
         try:
-            await _ingest(db, problem, cf_client_factory, scraper, editorial_fetcher)
+            await _ingest(
+                db, problem, cf_client_factory, scraper, editorial_fetcher, hint_generator
+            )
         except _IngestionFailed as exc:
             problem.ingestion_status = "failed"
             problem.ingestion_error = str(exc)
@@ -76,6 +82,7 @@ async def _ingest(
     cf_client_factory: CfClientFactory,
     scraper: Scraper,
     editorial_fetcher: EditorialFetcher,
+    hint_generator: HintGenerator,
 ) -> None:
     problem.ingestion_status = "scraping"
     problem.ingestion_error = None
@@ -150,10 +157,24 @@ async def _ingest(
             "(they validate the brute force during stress testing)."
         )
 
-    # --- hint generation seam (step 3) ---------------------------------------
-    # TODO(step 3): problem.ingestion_status = "generating_hints"; generate 4
-    # graduated hints from problem.editorial_text, embed them, persist EditorialHint
-    # rows — then fall through to "ready". Requires OPENAI_API_KEY and Qdrant.
+    # --- hint generation (step 3) --------------------------------------------
+    # Needs an editorial to paraphrase into graduated hints. Without one, the problem
+    # still reaches `ready` (statement + samples are usable for stress testing) — hints
+    # get generated on a later re-ingest once an editorial is supplied.
+    if problem.editorial_text:
+        problem.ingestion_status = "generating_hints"
+        await db.commit()
+        try:
+            levels = await hint_generator(problem)
+        except HintGenerationError as exc:
+            raise _IngestionFailed(f"Hint generation failed: {exc}") from exc
+
+        # Replace any prior hints so a re-ingest is idempotent, not additive.
+        await db.execute(delete(EditorialHint).where(EditorialHint.problem_id == problem.id))
+        for level, content in enumerate(levels, start=1):
+            db.add(EditorialHint(problem_id=problem.id, level=level, content=content))
+        await db.commit()
+
     problem.ingestion_status = "ready"
     problem.ingestion_error = None
     await db.commit()

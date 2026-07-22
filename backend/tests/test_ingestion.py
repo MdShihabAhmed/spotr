@@ -2,12 +2,31 @@
 
 import pytest
 
+from sqlalchemy import select
+
 from app.cf_client import CodeforcesAPIError, ProblemMetadata
 from app.cf_scraper import ScrapedStatement, ScrapeError
 from app.ingestion.pipeline import run_ingestion
-from app.models import Problem
+from app.models import EditorialHint, Problem
 
 SAMPLE = [{"input": "4", "expected_output": "2 2"}]
+
+
+async def _fake_hints(problem):
+    """Stand-in for the LLM hint generator — returns 4 valid graduated levels."""
+    return [f"Level {i}: increasingly detailed hint text about the approach." for i in range(1, 5)]
+
+
+async def _hint_levels(session_maker, problem_id):
+    async with session_maker() as db:
+        rows = (
+            await db.scalars(
+                select(EditorialHint)
+                .where(EditorialHint.problem_id == problem_id)
+                .order_by(EditorialHint.level)
+            )
+        ).all()
+        return [(r.level, r.content) for r in rows]
 
 
 async def _seed_pending(session_maker, **kwargs) -> int:
@@ -66,6 +85,7 @@ async def test_happy_path_reaches_ready_with_metadata_and_samples(db_session_mak
         session_maker=db_session_maker,
         cf_client_factory=_client_returning(meta),
         scraper=scraper,
+        hint_generator=_fake_hints,
     )
 
     async with db_session_maker() as db:
@@ -77,6 +97,10 @@ async def test_happy_path_reaches_ready_with_metadata_and_samples(db_session_mak
         assert p.tags == ["math", "greedy"]
         assert p.sample_tests == SAMPLE
         assert p.time_limit_ms == 2000
+
+    # editorial ("ed") present → 4 graduated hints generated and stored
+    levels = await _hint_levels(db_session_maker, pid)
+    assert [level for level, _ in levels] == [1, 2, 3, 4]
 
 
 async def test_metadata_api_failure_is_non_fatal(db_session_maker):
@@ -156,6 +180,7 @@ async def test_pasted_content_skips_scraping(db_session_maker):
         session_maker=db_session_maker,
         cf_client_factory=_client_returning(meta),
         scraper=scraper,
+        hint_generator=_fake_hints,
     )
 
     async with db_session_maker() as db:
@@ -188,6 +213,7 @@ async def test_editorial_discovered_from_scrape_and_fetched(db_session_maker):
         cf_client_factory=_client_returning(None),
         scraper=scraper,
         editorial_fetcher=editorial_fetcher,
+        hint_generator=_fake_hints,
     )
 
     async with db_session_maker() as db:
@@ -197,6 +223,53 @@ async def test_editorial_discovered_from_scrape_and_fetched(db_session_maker):
         assert fetched == [blog]  # fetched from the discovered link
         assert p.has_editorial is True
         assert "editorial" in p.editorial_text
+
+    # editorial present → hints generated
+    assert len(await _hint_levels(db_session_maker, pid)) == 4
+
+
+async def test_hint_generation_failure_marks_ingestion_failed(db_session_maker):
+    pid = await _seed_pending(db_session_maker, editorial_text="ed")
+    from app.ingestion.hint_generator import HintGenerationError
+
+    async def scraper(contest_id, index):
+        return ScrapedStatement(title="C. X", statement_text="s", sample_tests=SAMPLE)
+
+    async def bad_hints(problem):
+        raise HintGenerationError("model gave 2 levels")
+
+    await run_ingestion(
+        pid,
+        session_maker=db_session_maker,
+        cf_client_factory=_client_returning(None),
+        scraper=scraper,
+        hint_generator=bad_hints,
+    )
+
+    async with db_session_maker() as db:
+        p = await db.get(Problem, pid)
+        assert p.ingestion_status == "failed"
+        assert "hint generation failed" in p.ingestion_error.lower()
+
+
+async def test_no_editorial_reaches_ready_without_hints(db_session_maker):
+    pid = await _seed_pending(db_session_maker)  # no editorial
+
+    async def scraper(contest_id, index):
+        return ScrapedStatement(title="C. X", statement_text="s", sample_tests=SAMPLE)
+
+    await run_ingestion(
+        pid,
+        session_maker=db_session_maker,
+        cf_client_factory=_client_returning(None),
+        scraper=scraper,
+        hint_generator=_fake_hints,
+    )
+
+    async with db_session_maker() as db:
+        p = await db.get(Problem, pid)
+        assert p.ingestion_status == "ready"
+    assert await _hint_levels(db_session_maker, pid) == []  # no editorial → no hints
 
 
 async def test_interactive_tag_from_api_sets_flag(db_session_maker):

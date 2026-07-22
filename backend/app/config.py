@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     # Observability
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
+    langfuse_host: str = "https://cloud.langfuse.com"
 
     # Auth
     jwt_secret: str = "dev-only-secret-change-me"

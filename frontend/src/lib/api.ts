@@ -129,6 +129,9 @@ export type Problem = {
   ingestion_status: IngestionStatus;
   ingestion_error: string | null;
   ingested_at: string;
+  // Number of graduated hints generated (0–4). Content is served one level at a
+  // time by the reveal flow (step 4), never all at once.
+  hint_count: number;
 };
 
 export type IngestRequest = {

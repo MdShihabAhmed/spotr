@@ -9,7 +9,7 @@ type Health = { status: string };
 const ROADMAP = [
   { step: 1, name: "Foundation — auth, database, cache", done: true },
   { step: 2, name: "Problem ingestion (CF URL → statement + editorial)", done: true },
-  { step: 3, name: "Hint generation (4 graduated levels)", done: false },
+  { step: 3, name: "Hint generation (4 graduated levels)", done: true },
   { step: 4, name: "Hint flow agent + leakage eval", done: false },
   { step: 5, name: "Stress testing via Judge0", done: false },
   { step: 6, name: "Pitfall dialogue", done: false },

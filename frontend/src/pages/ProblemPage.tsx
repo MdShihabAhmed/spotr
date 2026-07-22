@@ -150,15 +150,19 @@ function ProblemView({ problem }: { problem: Problem }) {
           {/* The editorial is deliberately NOT rendered — showing it would spoil the
               graduated hints. We only confirm it was captured. */}
           <section className="card">
-            <h2>Editorial</h2>
-            {p.has_editorial ? (
+            <h2>Hints</h2>
+            {p.hint_count > 0 ? (
               <p className="muted">
-                ✓ Captured and hidden. It's used to generate graduated hints (step 3) — you won't see the
-                editorial itself, so the hints stay meaningful.
+                ✓ {p.hint_count} graduated hints generated from the editorial (kept hidden so they stay
+                meaningful). The reveal flow — one level at a time — ships next.
+              </p>
+            ) : p.has_editorial ? (
+              <p className="muted">
+                Editorial captured and hidden; hints will appear here once generated.
               </p>
             ) : (
               <p className="muted">
-                Not captured yet. Add the editorial blog URL from the ingest page when you have it.
+                No editorial captured yet, so no hints. Add the editorial blog URL from the ingest page.
               </p>
             )}
           </section>

@@ -78,3 +78,6 @@ class ProblemOut(BaseModel):
     ingestion_status: str
     ingestion_error: str | None
     ingested_at: datetime
+    # Number of graduated hints generated (0–4). Content is never exposed here — the
+    # reveal flow (step 4) serves levels one at a time through the hint session.
+    hint_count: int = 0

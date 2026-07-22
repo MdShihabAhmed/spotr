@@ -7,13 +7,13 @@ generation) is far too slow to block a request.
 """
 
 from fastapi import APIRouter, BackgroundTasks, Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.cf_url import parse_cf_url
 from app.dependencies import CurrentUser, DbSession
 from app.errors import ApiError
 from app.ingestion.pipeline import run_ingestion
-from app.models import Problem
+from app.models import EditorialHint, Problem
 from app.schemas import ProblemIngest, ProblemOut
 
 router = APIRouter(prefix="/problems", tags=["problems"])
@@ -21,6 +21,18 @@ router = APIRouter(prefix="/problems", tags=["problems"])
 # Statuses that mean "already ingested or in flight" — a re-ingest is a no-op that
 # returns the existing row. Only a previously `failed` problem is re-attempted.
 _IN_FLIGHT_OR_DONE = {"pending", "scraping", "generating_hints", "ready"}
+
+
+async def _problem_out(db, problem: Problem) -> ProblemOut:
+    """Serialize a problem, attaching its hint count (content stays server-side)."""
+    count = await db.scalar(
+        select(func.count())
+        .select_from(EditorialHint)
+        .where(EditorialHint.problem_id == problem.id)
+    )
+    out = ProblemOut.model_validate(problem)
+    out.hint_count = count or 0
+    return out
 
 
 def _apply_manual_content(problem: Problem, payload: ProblemIngest) -> None:
@@ -64,7 +76,7 @@ async def ingest_problem(
     if existing is not None:
         if existing.ingestion_status in _IN_FLIGHT_OR_DONE:
             response.status_code = 200
-            return existing
+            return await _problem_out(db, existing)
         # Previously failed: let the caller retry, this time supplying the content
         # (statement / samples / editorial) that scraping couldn't get.
         _apply_manual_content(existing, payload)
@@ -73,7 +85,7 @@ async def ingest_problem(
         await db.commit()
         background_tasks.add_task(run_ingestion, existing.id)
         response.status_code = 202
-        return existing
+        return await _problem_out(db, existing)
 
     problem = Problem(
         cf_url=parsed.canonical_url,
@@ -90,7 +102,7 @@ async def ingest_problem(
     # own session and must be able to read the row we just committed.
     background_tasks.add_task(run_ingestion, problem.id)
     response.status_code = 202
-    return problem
+    return await _problem_out(db, problem)
 
 
 @router.get("/{problem_id}", response_model=ProblemOut)
@@ -98,4 +110,4 @@ async def get_problem(problem_id: int, user: CurrentUser, db: DbSession):
     problem = await db.get(Problem, problem_id)
     if problem is None:
         raise ApiError(404, "problem_not_found", "No problem with that id")
-    return problem
+    return await _problem_out(db, problem)
