@@ -98,6 +98,53 @@ export function logout(): void {
   tokens.clear();
 }
 
+export type SampleTest = { input: string; expected_output: string };
+
+export type IngestionStatus =
+  | "pending"
+  | "scraping"
+  | "generating_hints"
+  | "ready"
+  | "failed";
+
+/** Mirrors backend ProblemOut. */
+export type Problem = {
+  id: number;
+  cf_url: string;
+  cf_contest_id: number;
+  cf_index: string;
+  title: string;
+  rating: number | null;
+  tags: string[];
+  statement_text: string;
+  constraints_text: string | null;
+  sample_tests: SampleTest[];
+  time_limit_ms: number | null;
+  memory_limit_mb: number | null;
+  editorial_url: string | null;
+  // The raw editorial never leaves the server (spoiler); we only learn if one exists.
+  has_editorial: boolean;
+  is_interactive: boolean;
+  has_multiple_answers: boolean;
+  ingestion_status: IngestionStatus;
+  ingestion_error: string | null;
+  ingested_at: string;
+};
+
+export type IngestRequest = {
+  cf_url: string;
+  statement_text?: string;
+  constraints_text?: string;
+  sample_tests?: SampleTest[];
+  editorial_url?: string;
+  editorial_text?: string;
+};
+
+export const ingestProblem = (body: IngestRequest) =>
+  api.post<Problem>("/problems/ingest", body);
+
+export const getProblem = (id: number) => api.get<Problem>(`/problems/${id}`);
+
 /** /login is form-encoded (OAuth2PasswordRequestForm), unlike every other endpoint. */
 export async function login(email: string, password: string): Promise<void> {
   const resp = await fetch(`${BASE_URL}/login`, {

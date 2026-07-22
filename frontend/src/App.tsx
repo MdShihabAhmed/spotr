@@ -3,7 +3,9 @@ import { Layout } from './components/Layout'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AccountPage } from './pages/AccountPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { IngestPage } from './pages/IngestPage'
 import { LoginPage } from './pages/LoginPage'
+import { ProblemPage } from './pages/ProblemPage'
 import { RegisterPage } from './pages/RegisterPage'
 import './App.css'
 
@@ -26,6 +28,22 @@ function App() {
           element={
             <Protected>
               <DashboardPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/ingest"
+          element={
+            <Protected>
+              <IngestPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/problems/:id"
+          element={
+            <Protected>
+              <ProblemPage />
             </Protected>
           }
         />

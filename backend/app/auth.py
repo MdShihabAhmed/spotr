@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 import jwt
 
-from backend.app.config import get_settings
+from app.config import get_settings
 
 ACCESS = "access"
 REFRESH = "refresh"

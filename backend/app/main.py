@@ -8,7 +8,7 @@ from app.cache import close_redis
 from app.config import get_settings
 from app.database import engine
 from app.errors import ApiError
-from app.routers import auth
+from app.routers import auth, problems
 
 
 @asynccontextmanager
@@ -34,6 +34,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(problems.router)
 
 
 @app.exception_handler(ApiError)

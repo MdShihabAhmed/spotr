@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { useCurrentUser } from "../hooks/useAuth";
 
@@ -7,7 +8,7 @@ type Health = { status: string };
 /** Mirrors guide.md's build order. Kept honest on purpose: shipped means shipped. */
 const ROADMAP = [
   { step: 1, name: "Foundation — auth, database, cache", done: true },
-  { step: 2, name: "Problem ingestion (CF URL → statement + editorial)", done: false },
+  { step: 2, name: "Problem ingestion (CF URL → statement + editorial)", done: true },
   { step: 3, name: "Hint generation (4 graduated levels)", done: false },
   { step: 4, name: "Hint flow agent + leakage eval", done: false },
   { step: 5, name: "Stress testing via Judge0", done: false },
@@ -27,11 +28,16 @@ export function DashboardPage() {
 
   return (
     <div className="stack">
-      <section>
-        <h1>Welcome back</h1>
-        <p className="muted">
-          Signed in as <code>{user?.email}</code>
-        </p>
+      <section className="title-row">
+        <div>
+          <h1>Welcome back</h1>
+          <p className="muted">
+            Signed in as <code>{user?.email}</code>
+          </p>
+        </div>
+        <Link to="/ingest" className="btn btn-primary">
+          Ingest a problem
+        </Link>
       </section>
 
       <section className="grid">

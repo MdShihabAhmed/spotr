@@ -57,6 +57,12 @@ class Problem(Base):
 
     hints: Mapped[list["EditorialHint"]] = relationship(back_populates="problem")
 
+    @property
+    def has_editorial(self) -> bool:
+        """Whether an editorial was captured — exposed to clients instead of the raw
+        editorial text, which must never leave the server (it would spoil the hints)."""
+        return bool(self.editorial_text)
+
 
 class EditorialHint(Base):
     __tablename__ = "editorial_hints"
