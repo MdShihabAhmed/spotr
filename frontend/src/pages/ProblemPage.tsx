@@ -5,8 +5,8 @@ import { MathText } from "../components/MathText";
 
 const STATUS_LABEL: Record<IngestionStatus, string> = {
   pending: "Queued",
-  scraping: "Fetching from Codeforces…",
-  generating_hints: "Generating hints…",
+  normalizing: "Cleaning up…",
+  generating_levels: "Building the hint ladder…",
   ready: "Ready",
   failed: "Failed",
 };
@@ -22,9 +22,8 @@ function StatusBadge({ status }: { status: IngestionStatus }) {
 }
 
 export function ProblemPage() {
-  const { id } = useParams();
-  const problemId = id ? Number(id) : null;
-  const { data: problem, isPending, error } = useProblem(problemId);
+  const { slug } = useParams();
+  const { data: problem, isPending, error } = useProblem(slug ?? null);
 
   if (isPending) {
     return <p className="muted">Loading…</p>;
@@ -52,14 +51,19 @@ function ProblemView({ problem }: { problem: Problem }) {
     <div className="stack">
       <section>
         <div className="title-row">
-          <h1>{p.title || `Problem ${p.cf_contest_id}${p.cf_index}`}</h1>
+          <h1>{p.title || p.external_id}</h1>
           <StatusBadge status={p.ingestion_status} />
         </div>
         <p className="muted">
-          <a href={p.cf_url} target="_blank" rel="noreferrer">
-            {p.cf_contest_id}
-            {p.cf_index} on Codeforces ↗
-          </a>
+          {p.url ? (
+            <a href={p.url} target="_blank" rel="noreferrer">
+              {p.external_id} on {p.source} ↗
+            </a>
+          ) : (
+            <>
+              {p.external_id} on {p.source}
+            </>
+          )}
         </p>
       </section>
 
@@ -148,21 +152,21 @@ function ProblemView({ problem }: { problem: Problem }) {
           )}
 
           {/* The editorial is deliberately NOT rendered — showing it would spoil the
-              graduated hints. We only confirm it was captured. */}
+              graduated ladder. We only confirm it was captured. */}
           <section className="card">
-            <h2>Hints</h2>
-            {p.hint_count > 0 ? (
+            <h2>Tutor</h2>
+            {p.level_count > 0 ? (
               <p className="muted">
-                ✓ {p.hint_count} graduated hints generated from the editorial (kept hidden so they stay
-                meaningful). The reveal flow — one level at a time — ships next.
+                ✓ {p.level_count}-level hint ladder built from the editorial (kept hidden so it stays
+                meaningful). The Socratic tutor — revealing one level at a time — ships next.
               </p>
             ) : p.has_editorial ? (
               <p className="muted">
-                Editorial captured and hidden; hints will appear here once generated.
+                Editorial captured and hidden; the hint ladder will appear here once generated.
               </p>
             ) : (
               <p className="muted">
-                No editorial captured yet, so no hints. Add the editorial blog URL from the ingest page.
+                No editorial captured yet, so no ladder. Add the editorial blog URL from the ingest page.
               </p>
             )}
           </section>

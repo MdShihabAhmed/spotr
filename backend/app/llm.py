@@ -60,22 +60,31 @@ async def complete_json(
     user: str,
     schema: dict[str, Any],
     schema_name: str = "response",
+    images: list[str] | None = None,
 ) -> dict[str, Any]:
     """One structured-output chat call. Returns parsed JSON matching `schema`.
 
-    Raises `LLMError` if the key is missing, the call fails, or the output isn't valid
-    JSON — callers turn that into a clear ingestion failure, never a 500.
+    `images` are `data:` URIs (base64) attached to the user message for multimodal
+    calls (e.g. reading a problem screenshot). Raises `LLMError` if the key is missing,
+    the call fails, or the output isn't valid JSON — callers turn that into a clear
+    failure, never a 500.
     """
     settings = get_settings()
     if not settings.openai_api_key:
         raise LLMError("LLM API key is not set (OPENAI_API_KEY in .env)")
+
+    if images:
+        user_content: Any = [{"type": "text", "text": user}]
+        user_content += [{"type": "image_url", "image_url": {"url": uri}} for uri in images]
+    else:
+        user_content = user
 
     try:
         resp = await get_client().chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": system},
-                {"role": "user", "content": user},
+                {"role": "user", "content": user_content},
             ],
             response_format={
                 "type": "json_schema",

@@ -32,6 +32,24 @@ class SampleTestIn(BaseModel):
     expected_output: str
 
 
+class NormalizeRequest(BaseModel):
+    """Raw problem input to clean: pasted `text` and/or a screenshot `image` (a `data:`
+    URI, base64). At least one must be provided."""
+
+    text: str | None = None
+    image: str | None = None
+
+
+class NormalizedOut(BaseModel):
+    """Cleaned, structured problem for the user to review/edit before ingesting."""
+
+    statement: str
+    constraints: str | None
+    samples: list[SampleTestIn]
+    time_limit_ms: int | None
+    memory_limit_mb: int | None
+
+
 class ProblemIngest(BaseModel):
     """Request body for `POST /problems/ingest`.
 
@@ -47,6 +65,8 @@ class ProblemIngest(BaseModel):
     statement_text: str | None = None
     constraints_text: str | None = None
     sample_tests: list[SampleTestIn] | None = None
+    time_limit_ms: int | None = None
+    memory_limit_mb: int | None = None
     editorial_url: str | None = None
     editorial_text: str | None = None
 

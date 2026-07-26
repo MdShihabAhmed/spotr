@@ -8,12 +8,12 @@ type Health = { status: string };
 /** Mirrors guide.md's build order. Kept honest on purpose: shipped means shipped. */
 const ROADMAP = [
   { step: 1, name: "Foundation — auth, database, cache", done: true },
-  { step: 2, name: "Problem ingestion (CF URL → statement + editorial)", done: true },
-  { step: 3, name: "Hint generation (4 graduated levels)", done: true },
-  { step: 4, name: "Hint flow agent + leakage eval", done: false },
-  { step: 5, name: "Stress testing via Judge0", done: false },
-  { step: 6, name: "Pitfall dialogue", done: false },
-  { step: 7, name: "Recommendations + CF handle verification", done: false },
+  { step: 2, name: "Re-architecture — source-agnostic schema + source abstraction", done: true },
+  { step: 3, name: "Problem input — paste/screenshot → AI normalize → ingest", done: true },
+  { step: 4, name: "Grounding RAG (CP-Algorithms, USACO, Handbook, PyRival)", done: false },
+  { step: 5, name: "Socratic tutor + revealed-set disclosure", done: false },
+  { step: 6, name: "No-leakage eval", done: false },
+  { step: 7, name: "Self-host packaging + README", done: false },
 ];
 
 export function DashboardPage() {
@@ -62,8 +62,8 @@ export function DashboardPage() {
       <section className="card">
         <h2>What's built</h2>
         <p className="muted">
-          Only step 1 is live. The screens for everything below ship alongside their endpoints —
-          there's nothing to fake here yet.
+          Steps 1–3 are live: you can ingest a problem (paste or screenshot → AI-cleaned → editorial
+          fetched, hint ladder built). The tutor chat and grounding ship next — nothing below is faked.
         </p>
         <ul className="roadmap">
           {ROADMAP.map((item) => (

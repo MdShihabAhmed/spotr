@@ -102,17 +102,18 @@ export type SampleTest = { input: string; expected_output: string };
 
 export type IngestionStatus =
   | "pending"
-  | "scraping"
-  | "generating_hints"
+  | "normalizing"
+  | "generating_levels"
   | "ready"
   | "failed";
 
-/** Mirrors backend ProblemOut. */
+/** Mirrors backend ProblemOut. Addressed by `slug` ("cf-1846C"), not an int id. */
 export type Problem = {
   id: number;
-  cf_url: string;
-  cf_contest_id: number;
-  cf_index: string;
+  slug: string;
+  source: string;
+  external_id: string;
+  url: string | null;
   title: string;
   rating: number | null;
   tags: string[];
@@ -128,17 +129,20 @@ export type Problem = {
   has_multiple_answers: boolean;
   ingestion_status: IngestionStatus;
   ingestion_error: string | null;
-  ingested_at: string;
-  // Number of graduated hints generated (0–4). Content is served one level at a
-  // time by the reveal flow (step 4), never all at once.
-  hint_count: number;
+  created_at: string;
+  // Number of graduated ladder levels generated (0–4). Content is served one level at
+  // a time by the tutor's revealed-set flow, never all at once.
+  level_count: number;
 };
 
 export type IngestRequest = {
-  cf_url: string;
+  source: string;
+  url: string;
   statement_text?: string;
   constraints_text?: string;
   sample_tests?: SampleTest[];
+  time_limit_ms?: number;
+  memory_limit_mb?: number;
   editorial_url?: string;
   editorial_text?: string;
 };
@@ -146,7 +150,20 @@ export type IngestRequest = {
 export const ingestProblem = (body: IngestRequest) =>
   api.post<Problem>("/problems/ingest", body);
 
-export const getProblem = (id: number) => api.get<Problem>(`/problems/${id}`);
+export const getProblem = (slug: string) => api.get<Problem>(`/problems/${slug}`);
+
+/** Cleaned, structured problem returned by /problems/normalize. */
+export type NormalizedProblem = {
+  statement: string;
+  constraints: string | null;
+  samples: SampleTest[];
+  time_limit_ms: number | null;
+  memory_limit_mb: number | null;
+};
+
+/** Send pasted text and/or a screenshot data-URI; get back clean structured fields. */
+export const normalizeProblem = (body: { text?: string; image?: string }) =>
+  api.post<NormalizedProblem>("/problems/normalize", body);
 
 /** /login is form-encoded (OAuth2PasswordRequestForm), unlike every other endpoint. */
 export async function login(email: string, password: string): Promise<void> {

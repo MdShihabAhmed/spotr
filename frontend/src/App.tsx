@@ -40,7 +40,7 @@ function App() {
           }
         />
         <Route
-          path="/problems/:id"
+          path="/problems/:slug"
           element={
             <Protected>
               <ProblemPage />

@@ -550,3 +550,56 @@ details.card[open] > summary {
     display: none;
   }
 }
+
+/* --- Ingest: source row, input mode tabs, screenshot, extracted preview --- */
+.field-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+.field-row select {
+  min-width: 8rem;
+}
+select {
+  padding: 0.5rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border, #33405a);
+  background: var(--input-bg, #0f1626);
+  color: inherit;
+}
+.mode-tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0.3rem 0 0.5rem;
+}
+.tab {
+  padding: 0.35rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid var(--border, #33405a);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.tab.active {
+  background: var(--accent, #4f7cff);
+  border-color: var(--accent, #4f7cff);
+  color: #fff;
+}
+.screenshot-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.ss-preview {
+  max-width: 100%;
+  max-height: 320px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #33405a);
+  object-fit: contain;
+}
+.extracted {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed var(--border, #33405a);
+}

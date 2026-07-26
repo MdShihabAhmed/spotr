@@ -13,7 +13,8 @@ from app.dependencies import CurrentUser, DbSession
 from app.errors import ApiError
 from app.ingestion.pipeline import run_ingestion
 from app.models import HintLevel, Problem
-from app.schemas import ProblemIngest, ProblemOut
+from app.normalize import NormalizeError, normalize
+from app.schemas import NormalizedOut, NormalizeRequest, ProblemIngest, ProblemOut
 from app.sources import get_source
 
 router = APIRouter(prefix="/problems", tags=["problems"])
@@ -42,10 +43,34 @@ def _apply_content(problem: Problem, payload: ProblemIngest) -> None:
         problem.constraints_text = payload.constraints_text
     if payload.sample_tests is not None:
         problem.sample_tests = [s.model_dump() for s in payload.sample_tests]
+    if payload.time_limit_ms is not None:
+        problem.time_limit_ms = payload.time_limit_ms
+    if payload.memory_limit_mb is not None:
+        problem.memory_limit_mb = payload.memory_limit_mb
     if payload.editorial_url is not None:
         problem.editorial_url = payload.editorial_url
     if payload.editorial_text is not None:
         problem.editorial_text = payload.editorial_text
+
+
+@router.post("/normalize", response_model=NormalizedOut)
+async def normalize_input(payload: NormalizeRequest, user: CurrentUser):
+    """Clean pasted text / a screenshot into structured `{statement, constraints,
+    samples, limits}` for the user to review before ingesting. Synchronous (one LLM
+    call) so the user confirms the extraction — vision/paste can err."""
+    if not payload.text and not payload.image:
+        raise ApiError(400, "empty_input", "Provide pasted text or a screenshot to normalize.")
+    try:
+        result = await normalize(text=payload.text, image_data_uri=payload.image)
+    except NormalizeError as exc:
+        raise ApiError(422, "normalization_failed", str(exc))
+    return NormalizedOut(
+        statement=result.statement,
+        constraints=result.constraints,
+        samples=result.samples,
+        time_limit_ms=result.time_limit_ms,
+        memory_limit_mb=result.memory_limit_mb,
+    )
 
 
 @router.post("/ingest", response_model=ProblemOut)

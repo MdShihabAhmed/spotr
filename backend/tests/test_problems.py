@@ -26,6 +26,34 @@ async def test_ingest_requires_auth(client):
     assert r.status_code == 401
 
 
+async def test_normalize_returns_structured_problem(client, auth_headers, monkeypatch):
+    from app.normalize import NormalizedProblem
+
+    async def fake_normalize(*, text=None, image_data_uri=None):
+        assert text == "messy paste"
+        return NormalizedProblem(
+            statement="clean $$$n$$$",
+            constraints="$$$1 \\le n$$$",
+            samples=[{"input": "4", "expected_output": "2 2"}],
+            time_limit_ms=2000,
+            memory_limit_mb=256,
+        )
+
+    monkeypatch.setattr("app.routers.problems.normalize", fake_normalize)
+    r = await client.post("/problems/normalize", json={"text": "messy paste"}, headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["statement"] == "clean $$$n$$$"
+    assert body["samples"] == [{"input": "4", "expected_output": "2 2"}]
+    assert body["time_limit_ms"] == 2000
+
+
+async def test_normalize_empty_input_returns_400(client, auth_headers):
+    r = await client.post("/problems/normalize", json={}, headers=auth_headers)
+    assert r.status_code == 400
+    assert r.json()["code"] == "empty_input"
+
+
 async def test_get_requires_auth(client):
     assert (await client.get("/problems/cf-1846C")).status_code == 401
 
