@@ -1,20 +1,20 @@
-"""Background ingestion orchestrator: CF URL → fully populated `Problem` row.
+"""Background ingestion orchestrator: user-provided problem → populated `Problem` row.
 
-Runs as a FastAPI `BackgroundTask` (scrape + metadata is seconds; hint generation,
-added in step 3, pushes it to 30–90s). Two hard rules encoded here:
+Runs as a FastAPI `BackgroundTask` (editorial fetch + level generation is multi-second).
+Two hard rules:
 
-- **It opens its OWN database session** from `session_maker`, never the request's.
-  The request-scoped session from `get_db` is torn down when the response is sent;
-  a background task that kept using it would hit a closed session.
-- **It never raises.** A background task has no caller to catch it, so every failure
-  is turned into `ingestion_status="failed"` with an actionable `ingestion_error`.
+- **It opens its OWN database session** from `session_maker`, never the request's (the
+  request-scoped session is torn down when the response is sent).
+- **It never raises.** Every failure becomes `ingestion_status="failed"` with an
+  actionable `ingestion_error`.
 
-Everything external (CF API client, statement scraper) is injected so the whole
-pipeline is testable offline against sqlite with fakes — no live network in CI.
+Data model (re-architected): the user supplies statement/constraints/samples (no
+scraping). The pipeline fetches only permitted extras — metadata + editorial — via the
+problem's `ProblemSource`, then generates the graduated ladder. Everything external is
+injected so the whole pipeline is testable offline against sqlite with fakes.
 
-Scope note (phase 2): this lands the problem at `ready` once statement + samples +
-editorial are stored. Step 3 inserts hint generation (`generating_hints`) between
-scraping and `ready`; see the marked seam below.
+Seam: `normalize.py` (step 3) will run before this to clean pasted/screenshot input; for
+now statement/constraints/samples are taken as supplied.
 """
 
 from __future__ import annotations
@@ -24,33 +24,22 @@ from collections.abc import Awaitable, Callable
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.cf_client import CodeforcesClient
-from app.cf_scraper import (
-    ScrapedStatement,
-    ScrapeError,
-    detect_interactive,
-    detect_multiple_answers,
-    scrape_problem_statement,
-)
 from app.database import async_session_maker
-from app.ingestion.editorial_scraper import fetch_editorial_text
 from app.ingestion.hint_generator import HintGenerationError, generate_hints
-from app.models import EditorialHint, Problem
+from app.models import HintLevel, Problem
+from app.problem_flags import detect_interactive, detect_multiple_answers
+from app.sources import ProblemSource, get_source
 
-CfClientFactory = Callable[[], CodeforcesClient]
-Scraper = Callable[[int, str], Awaitable[ScrapedStatement]]
-EditorialFetcher = Callable[[str], Awaitable[str | None]]
-HintGenerator = Callable[[Problem], Awaitable[list[str]]]
+SourceResolver = Callable[[str], ProblemSource]
+LevelGenerator = Callable[[Problem], Awaitable[list[str]]]
 
 
 async def run_ingestion(
     problem_id: int,
     *,
     session_maker: async_sessionmaker[AsyncSession] = async_session_maker,
-    cf_client_factory: CfClientFactory = CodeforcesClient,
-    scraper: Scraper = scrape_problem_statement,
-    editorial_fetcher: EditorialFetcher = fetch_editorial_text,
-    hint_generator: HintGenerator = generate_hints,
+    source_resolver: SourceResolver = get_source,
+    level_generator: LevelGenerator = generate_hints,
 ) -> None:
     """Populate a `Problem` row's content, then mark it ready or failed."""
     async with session_maker() as db:
@@ -59,9 +48,7 @@ async def run_ingestion(
             return  # row deleted between scheduling and running — nothing to do
 
         try:
-            await _ingest(
-                db, problem, cf_client_factory, scraper, editorial_fetcher, hint_generator
-            )
+            await _ingest(db, problem, source_resolver, level_generator)
         except _IngestionFailed as exc:
             problem.ingestion_status = "failed"
             problem.ingestion_error = str(exc)
@@ -79,100 +66,70 @@ class _IngestionFailed(Exception):
 async def _ingest(
     db: AsyncSession,
     problem: Problem,
-    cf_client_factory: CfClientFactory,
-    scraper: Scraper,
-    editorial_fetcher: EditorialFetcher,
-    hint_generator: HintGenerator,
+    source_resolver: SourceResolver,
+    level_generator: LevelGenerator,
 ) -> None:
-    problem.ingestion_status = "scraping"
+    problem.ingestion_status = "pending"
     problem.ingestion_error = None
     await db.commit()
 
-    # --- metadata (CF API, best-effort) --------------------------------------
-    # Missing metadata is non-fatal: brand-new problems and gyms aren't always in
-    # problemset.problems, and rating can be unassigned. Scraped content still stands.
-    client = cf_client_factory()
     try:
-        metadata = await client.get_problem_metadata(problem.cf_contest_id, problem.cf_index)
-    except Exception:
-        # Metadata is best-effort — a CF API hiccup, a Redis outage, anything. It must
-        # never fail an ingest that has pasted content and doesn't need the network.
-        metadata = None
-    finally:
-        await client.aclose()
+        source = source_resolver(problem.source)
+    except ValueError as exc:
+        raise _IngestionFailed(f"Unknown problem source {problem.source!r}: {exc}") from exc
 
+    # --- metadata (permitted API, best-effort) -------------------------------
+    # Missing metadata is non-fatal: brand-new problems / gyms aren't always listed, and
+    # rating can be unassigned. A CF API hiccup or Redis outage must never fail an ingest
+    # whose statement/samples the user already provided.
+    try:
+        metadata = await source.fetch_metadata(problem.source_metadata or {})
+    except Exception:
+        metadata = None
     if metadata is not None:
         problem.title = metadata.title or problem.title
         problem.rating = metadata.rating
         problem.tags = metadata.tags
 
-    # --- statement: pasted content wins; scrape only when nothing was pasted --
-    # Codeforces returns 403 to server-side scrapers, so the manual-paste path is
-    # the reliable one. If the statement or samples were supplied at ingest, trust
-    # them and skip scraping entirely.
-    if problem.statement_text or problem.sample_tests:
-        text = problem.statement_text or ""
-        problem.is_interactive = detect_interactive(text) or "interactive" in (problem.tags or [])
-        problem.has_multiple_answers = detect_multiple_answers(text)
-    else:
-        try:
-            scraped = await scraper(problem.cf_contest_id, problem.cf_index)
-        except ScrapeError as exc:
-            raise _IngestionFailed(
-                "Couldn't fetch the problem statement from Codeforces "
-                f"({exc}). Codeforces blocks automated requests — this is expected. "
-                "Paste the statement and sample tests manually to ingest it."
-            ) from exc
-
-        if scraped.title and not problem.title:
-            problem.title = scraped.title
-        problem.statement_text = scraped.statement_text
-        problem.constraints_text = scraped.constraints_text
-        problem.sample_tests = scraped.sample_tests
-        problem.time_limit_ms = scraped.time_limit_ms
-        problem.memory_limit_mb = scraped.memory_limit_mb
-        # Interactive can be signalled by the CF tag OR statement text; either wins.
-        problem.is_interactive = scraped.is_interactive or "interactive" in (problem.tags or [])
-        problem.has_multiple_answers = scraped.has_multiple_answers
-        # Auto-discover the editorial link from the page's "Contest materials" box,
-        # unless the user supplied one explicitly.
-        if not problem.editorial_url and scraped.editorial_url:
-            problem.editorial_url = scraped.editorial_url
+    # The user provides the statement/constraints/samples; derive the exclusion flags.
+    text = problem.statement_text or ""
+    problem.is_interactive = detect_interactive(text) or "interactive" in (problem.tags or [])
+    problem.has_multiple_answers = detect_multiple_answers(text)
     await db.commit()
 
-    # --- editorial (best-effort, optional) -----------------------------------
-    # Fetch the editorial text via the blogEntry.view API (not Cloudflare-blocked).
-    # It's stored server-side only and never returned to clients — showing it would
-    # spoil the graduated hints. Not reaching an editorial doesn't fail the ingest.
-    if problem.editorial_url and not problem.editorial_text:
-        problem.editorial_text = await editorial_fetcher(problem.editorial_url)
-        await db.commit()
-
-    # Samples are Required by the data model precisely so stress testing has ground
-    # truth. Gate ingestion on them here rather than failing confusingly deep inside
-    # a stress test later (a documented trap).
+    # Samples are required (they anchor the tutor's I/O references and future stress-testing).
     if not problem.sample_tests:
         raise _IngestionFailed(
-            "No sample tests were found on the statement page. Samples are required "
-            "(they validate the brute force during stress testing)."
+            "No sample tests were provided. Paste at least one sample (input + expected "
+            "output) so the problem can be ingested."
         )
 
-    # --- hint generation (step 3) --------------------------------------------
-    # Needs an editorial to paraphrase into graduated hints. Without one, the problem
-    # still reaches `ready` (statement + samples are usable for stress testing) — hints
-    # get generated on a later re-ingest once an editorial is supplied.
+    # --- editorial (best-effort, optional) -----------------------------------
+    # Fetched via the source's permitted API (CF: blogEntry.view). Stored server-side
+    # only, never returned to clients. Not reaching an editorial doesn't fail the ingest.
+    if problem.editorial_url and not problem.editorial_text:
+        try:
+            problem.editorial_text = await source.fetch_editorial(problem.editorial_url)
+        except Exception:
+            problem.editorial_text = None
+        await db.commit()
+
+    # --- graduated ladder ----------------------------------------------------
+    # Needs an editorial to ground the levels. Without one the problem still reaches
+    # `ready` (statement + samples are usable) — levels get generated on a later
+    # re-ingest once an editorial link is supplied.
     if problem.editorial_text:
-        problem.ingestion_status = "generating_hints"
+        problem.ingestion_status = "generating_levels"
         await db.commit()
         try:
-            levels = await hint_generator(problem)
+            levels = await level_generator(problem)
         except HintGenerationError as exc:
-            raise _IngestionFailed(f"Hint generation failed: {exc}") from exc
+            raise _IngestionFailed(f"Level generation failed: {exc}") from exc
 
-        # Replace any prior hints so a re-ingest is idempotent, not additive.
-        await db.execute(delete(EditorialHint).where(EditorialHint.problem_id == problem.id))
+        # Replace any prior levels so a re-ingest is idempotent, not additive.
+        await db.execute(delete(HintLevel).where(HintLevel.problem_id == problem.id))
         for level, content in enumerate(levels, start=1):
-            db.add(EditorialHint(problem_id=problem.id, level=level, content=content))
+            db.add(HintLevel(problem_id=problem.id, level=level, content=content))
         await db.commit()
 
     problem.ingestion_status = "ready"

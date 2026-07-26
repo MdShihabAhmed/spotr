@@ -11,9 +11,9 @@ from app.models import Problem
 
 def _problem() -> Problem:
     return Problem(
-        cf_url="https://codeforces.com/problemset/problem/1846/C",
-        cf_contest_id=1846,
-        cf_index="C",
+        slug="cf-1846C",
+        source="codeforces",
+        external_id="1846C",
         title="C. Example",
         rating=1200,
         tags=["math"],
@@ -47,6 +47,33 @@ async def test_prompt_includes_statement_constraints_and_editorial():
     assert "1 <= n <= 2*10^5" in prompt
     assert "Find the answer." in prompt
     assert "two pointers" in prompt  # editorial text is included
+
+
+async def test_shorter_later_level_is_still_valid():
+    # Regression: graduated hints increase in what they reveal, not in length. A crisp
+    # final answer (level4) is often shorter than the level-3 reasoning — must NOT fail.
+    async def chat_fn(**kwargs):
+        return {
+            "level1": "Look at how small the constraint on w is; efficiency is irrelevant here.",
+            "level2": "Two even numbers always sum to an even number, so odd w is impossible.",
+            "level3": "If w is even and greater than two, pick 2 and w-2, both even and positive; "
+            "only w=2 fails because 1+1 are odd.",
+            "level4": "Print YES iff w is even and w > 2.",
+        }
+
+    levels = await generate_hints(_problem(), chat_fn=chat_fn)
+    assert len(levels) == 4
+    assert len(levels[3]) < len(levels[2])  # later level is shorter, yet accepted
+
+
+async def test_duplicate_levels_fail_validation():
+    async def chat_fn(**kwargs):
+        dup = _valid_payload()
+        dup["level2"] = dup["level1"]  # two identical levels aren't graduated
+        return dup
+
+    with pytest.raises(HintGenerationError):
+        await generate_hints(_problem(), chat_fn=chat_fn)
 
 
 async def test_empty_level_fails_validation_then_raises():

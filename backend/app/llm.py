@@ -1,5 +1,9 @@
-"""LLM access layer: a single place that owns the OpenAI client and structured calls.
+"""LLM access layer: a single place that owns the LLM client and structured calls.
 
+- **Provider-agnostic by design.** We use the OpenAI SDK, but point it at any
+  OpenAI-compatible endpoint via `llm_base_url` (Google Gemini free tier by default,
+  or Groq, OpenRouter, a local Ollama, or OpenAI itself). Switching providers is a
+  `.env` edit, not a code change — a deliberate "no vendor lock-in" decision.
 - Model names come from config (`llm_model_strong` / `llm_model_fast`), never hardcoded.
 - **Langfuse tracing is wired here, from the first call** — but it's optional: when
   Langfuse keys are set we use its drop-in traced OpenAI client, otherwise a plain one.
@@ -27,6 +31,9 @@ class LLMError(Exception):
 @lru_cache
 def get_client() -> AsyncOpenAI:
     settings = get_settings()
+    # base_url="" means the SDK's default (OpenAI). Any other value points the same SDK
+    # at an OpenAI-compatible provider (Gemini/Groq/Ollama/…). None lets the SDK default.
+    base_url = settings.llm_base_url or None
     if settings.langfuse_public_key and settings.langfuse_secret_key:
         try:
             from langfuse import Langfuse
@@ -39,11 +46,11 @@ def get_client() -> AsyncOpenAI:
             )
             from langfuse.openai import AsyncOpenAI as TracedAsyncOpenAI
 
-            return TracedAsyncOpenAI(api_key=settings.openai_api_key)
+            return TracedAsyncOpenAI(api_key=settings.openai_api_key, base_url=base_url)
         except Exception:
             # Tracing is best-effort; never let it stop real work.
             pass
-    return AsyncOpenAI(api_key=settings.openai_api_key)
+    return AsyncOpenAI(api_key=settings.openai_api_key, base_url=base_url)
 
 
 async def complete_json(
@@ -61,7 +68,7 @@ async def complete_json(
     """
     settings = get_settings()
     if not settings.openai_api_key:
-        raise LLMError("OPENAI_API_KEY is not set")
+        raise LLMError("LLM API key is not set (OPENAI_API_KEY in .env)")
 
     try:
         resp = await get_client().chat.completions.create(

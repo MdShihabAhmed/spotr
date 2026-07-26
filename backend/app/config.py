@@ -12,12 +12,11 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: str = ""
 
-    # Code execution sandbox
-    judge0_url: str = "http://localhost:2358"
-    judge0_api_key: str = ""
-
-    # LLM
-    openai_api_key: str = ""
+    # LLM. Provider-agnostic: any OpenAI-compatible endpoint works by setting
+    # `llm_base_url` + `openai_api_key` + model names. Empty base_url = OpenAI itself.
+    # Default .env targets Google Gemini's free-tier OpenAI-compatible endpoint.
+    openai_api_key: str = ""  # the bearer token for whichever provider llm_base_url points at
+    llm_base_url: str = ""  # e.g. Gemini: https://generativelanguage.googleapis.com/v1beta/openai/
     llm_model_strong: str = "gpt-5.2"
     llm_model_fast: str = "gpt-5-mini"
     embedding_model: str = "text-embedding-3-small"
@@ -36,10 +35,6 @@ class Settings(BaseSettings):
     # Frontend deploys to its own origin, so CORS is required, not optional.
     # Comma-separated; the browser sends credentials, so "*" is not usable here.
     cors_origins: str = "http://localhost:5173"
-
-    # Quotas
-    stress_test_max_cases: int = 30
-    stress_test_daily_limit_per_user: int = 10
 
     @property
     def cors_origin_list(self) -> list[str]:

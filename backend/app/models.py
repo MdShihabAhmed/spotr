@@ -1,3 +1,16 @@
+"""Database models for the grounded Socratic tutor (six tables).
+
+Re-architected 2026-07-27 (see guide.md "Data Model"):
+- `Problem` is **source-agnostic** — a `slug` ("{source}-{external_id}", e.g. "cf-1846C")
+  is the public/route id; `source` + `external_id` are the identity. Codeforces-specific
+  bits live in `source_metadata` so the CF API path needs no re-parsing.
+- `HintLevel` is the fixed graduated ladder revealed from (renamed from EditorialHint).
+- `TutorSession.revealed_levels` is a disclosure **set**, not a `current_level` ceiling —
+  manual reveal fills it sequentially, chat unlocks single matched levels.
+- `GroundingChunk` is a section-level chunk of a reference corpus, with provenance.
+The old `StressTestRun` / `ConceptNote(topic unique)` shapes are gone (deferred / reworked).
+"""
+
 from datetime import datetime
 
 from sqlalchemy import (
@@ -22,69 +35,79 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255))
+    # Optional, for a possible future personalization; harmless now.
     cf_handle: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    sessions: Mapped[list["HintSession"]] = relationship(back_populates="user")
+    sessions: Mapped[list["TutorSession"]] = relationship(back_populates="user")
 
 
 class Problem(Base):
     __tablename__ = "problems"
-    __table_args__ = (UniqueConstraint("cf_contest_id", "cf_index"),)
+    # Identity is (source, external_id); `slug` is the human-readable projection of it.
+    __table_args__ = (UniqueConstraint("source", "external_id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    cf_url: Mapped[str] = mapped_column(String(512), unique=True)
-    cf_contest_id: Mapped[int] = mapped_column(Integer)
-    cf_index: Mapped[str] = mapped_column(String(8))
+    slug: Mapped[str] = mapped_column(String(128), unique=True, index=True)  # "cf-1846C"
+    source: Mapped[str] = mapped_column(String(32))  # "codeforces"
+    external_id: Mapped[str] = mapped_column(String(64))  # "1846C"
+    url: Mapped[str | None] = mapped_column(String(512), nullable=True)  # canonical, display only
+    # Source-specific identifiers so API calls don't re-parse the URL (CF: {contest_id, index}).
+    source_metadata: Mapped[dict] = mapped_column(JSON, default=dict)
+
     title: Mapped[str] = mapped_column(String(255), default="")
     rating: Mapped[int | None] = mapped_column(Integer, nullable=True)
     tags: Mapped[list] = mapped_column(JSON, default=list)
     statement_text: Mapped[str] = mapped_column(Text, default="")
     constraints_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # list of {"input": str, "expected_output": str} — ground truth for validating
-    # the LLM-generated brute force before it is trusted in stress tests
+    # list of {"input": str, "expected_output": str} — required to reach `ready`
     sample_tests: Mapped[list] = mapped_column(JSON, default=list)
     time_limit_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     memory_limit_mb: Mapped[int | None] = mapped_column(Integer, nullable=True)
     editorial_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Raw editorial — stored server-side, NEVER serialized to clients (spoiler guard).
     editorial_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_interactive: Mapped[bool] = mapped_column(Boolean, default=False)
     has_multiple_answers: Mapped[bool] = mapped_column(Boolean, default=False)
-    # "pending" | "scraping" | "generating_hints" | "ready" | "failed"
+    # "pending" | "normalizing" | "generating_levels" | "ready" | "failed"
     ingestion_status: Mapped[str] = mapped_column(String(32), default="pending")
     ingestion_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    hints: Mapped[list["EditorialHint"]] = relationship(back_populates="problem")
+    levels: Mapped[list["HintLevel"]] = relationship(back_populates="problem")
 
     @property
     def has_editorial(self) -> bool:
-        """Whether an editorial was captured — exposed to clients instead of the raw
-        editorial text, which must never leave the server (it would spoil the hints)."""
+        """Exposed to clients instead of the raw editorial text, which must never leave
+        the server (it would spoil the graduated ladder)."""
         return bool(self.editorial_text)
 
 
-class EditorialHint(Base):
-    __tablename__ = "editorial_hints"
+class HintLevel(Base):
+    """One rung of a problem's fixed graduated ladder (1–4). The conversation reveals
+    from these pre-authored texts, so nothing free-form is ever leaked."""
+
+    __tablename__ = "hint_levels"
     __table_args__ = (UniqueConstraint("problem_id", "level"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     problem_id: Mapped[int] = mapped_column(ForeignKey("problems.id"))
     level: Mapped[int] = mapped_column(Integer)  # 1–4
     content: Mapped[str] = mapped_column(Text)
-    qdrant_point_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
-    problem: Mapped["Problem"] = relationship(back_populates="hints")
+    problem: Mapped["Problem"] = relationship(back_populates="levels")
 
 
-class HintSession(Base):
-    __tablename__ = "hint_sessions"
+class TutorSession(Base):
+    __tablename__ = "tutor_sessions"
     __table_args__ = (UniqueConstraint("user_id", "problem_id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     problem_id: Mapped[int] = mapped_column(ForeignKey("problems.id"))
-    current_level: Mapped[int] = mapped_column(Integer, default=0)  # 0 = no hints revealed yet
+    # The disclosure SET, e.g. [1, 2] or [1, 3] — the levels the tutor may discuss.
+    # Manual reveal fills it sequentially; a chat demonstration unlocks a single level.
+    revealed_levels: Mapped[list] = mapped_column(JSON, default=list)
     # "active" | "solved" | "gave_up"
     status: Mapped[str] = mapped_column(String(16), default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -98,44 +121,31 @@ class HintSession(Base):
 
 
 class SessionMessage(Base):
-    """Durable chat history for both hint clarification Q&A and the pitfall dialogue."""
+    """Durable tutor chat history."""
 
     __tablename__ = "session_messages"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    session_id: Mapped[int] = mapped_column(ForeignKey("hint_sessions.id"), index=True)
-    kind: Mapped[str] = mapped_column(String(16))  # "clarification" | "pitfall"
+    session_id: Mapped[int] = mapped_column(ForeignKey("tutor_sessions.id"), index=True)
     role: Mapped[str] = mapped_column(String(16))  # "user" | "assistant"
-    hint_level: Mapped[int | None] = mapped_column(Integer, nullable=True)
     content: Mapped[str] = mapped_column(Text)
+    # Grounding chunks referenced in an assistant turn: [{source, url, section, page}].
+    citations: Mapped[list | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    session: Mapped["HintSession"] = relationship(back_populates="messages")
+    session: Mapped["TutorSession"] = relationship(back_populates="messages")
 
 
-class StressTestRun(Base):
-    __tablename__ = "stress_test_runs"
+class GroundingChunk(Base):
+    """A section-level chunk of a reference corpus (CP-Algorithms / USACO Guide /
+    CP Handbook / PyRival), embedded in Qdrant. Carries provenance for citations."""
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    session_id: Mapped[int] = mapped_column(ForeignKey("hint_sessions.id"), index=True)
-    submitted_code: Mapped[str] = mapped_column(Text)
-    language: Mapped[str] = mapped_column(String(16))  # whitelist, e.g. "cpp17" | "python3"
-    brute_force_code: Mapped[str | None] = mapped_column(Text, nullable=True)
-    brute_force_validated: Mapped[bool] = mapped_column(Boolean, default=False)
-    num_cases_run: Mapped[int] = mapped_column(Integer, default=0)
-    counter_example_input: Mapped[str | None] = mapped_column(Text, nullable=True)
-    user_output: Mapped[str | None] = mapped_column(Text, nullable=True)
-    expected_output: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # "passed_stress_test" | "counter_example_found" | "brute_force_generation_failed" | "user_code_error"
-    verdict: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-
-class ConceptNote(Base):
-    __tablename__ = "concept_notes"
+    __tablename__ = "grounding_chunks"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    topic: Mapped[str] = mapped_column(String(64), unique=True)
-    summary: Mapped[str] = mapped_column(Text)
-    source_url: Mapped[str] = mapped_column(String(512))
+    source: Mapped[str] = mapped_column(String(32))  # "cp-algorithms" | "usaco-guide" | ...
+    title: Mapped[str] = mapped_column(String(255))  # section heading
+    url: Mapped[str] = mapped_column(String(512))  # exact source URL / repo path
+    page: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Handbook page, if any
+    content: Mapped[str] = mapped_column(Text)
     qdrant_point_id: Mapped[str | None] = mapped_column(String(64), nullable=True)

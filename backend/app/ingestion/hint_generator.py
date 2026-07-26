@@ -6,8 +6,9 @@ editorial and teaches the problem→approach mapping — why an approach is corr
 the constraints point to it — laddering from a gentle nudge to the full solution.
 
 All 4 levels are produced in **one structured-output call** (cheaper, and the model keeps
-the levels distinct when it writes them together). Output is validated (4 non-empty,
-each at least as revealing/long as the previous); on failure we retry once, then raise.
+the levels distinct when it writes them together). Output is validated (exactly 4 levels,
+each non-empty, substantive, and distinct — NOT by length, since a crisp final answer is
+often shorter than the reasoning that motivates it); on failure we retry once, then raise.
 """
 
 from __future__ import annotations
@@ -67,7 +68,7 @@ ChatFn = Callable[..., Awaitable[dict[str, Any]]]
 
 def _build_user_prompt(problem: Problem) -> str:
     return (
-        f"# Problem: {problem.title or f'{problem.cf_contest_id}{problem.cf_index}'}\n"
+        f"# Problem: {problem.title or problem.external_id}\n"
         f"Rating: {problem.rating if problem.rating is not None else 'unknown'}\n"
         f"Tags: {', '.join(problem.tags) if problem.tags else 'none'}\n\n"
         f"## Statement\n{problem.statement_text or '(not available)'}\n\n"
@@ -77,12 +78,22 @@ def _build_user_prompt(problem: Problem) -> str:
     )
 
 
+_MIN_LEVEL_CHARS = 20  # a substantive nudge, not "N/A" or a single word
+
+
 def _validate(levels: list[str]) -> bool:
-    if len(levels) != NUM_LEVELS or not all(level.strip() for level in levels):
+    if len(levels) != NUM_LEVELS:
         return False
-    # Roughly increasing detail: each level at least ~80% the length of the previous.
-    # A cheap guard against the model collapsing everything into level 1.
-    return all(len(levels[i]) >= 0.8 * len(levels[i - 1]) for i in range(1, NUM_LEVELS))
+    stripped = [level.strip() for level in levels]
+    # Every level must be non-empty and substantive — guards against the model
+    # collapsing the ladder or emitting a near-empty level. We deliberately do NOT
+    # check that later levels are *longer*: graduated hints increase in what they
+    # reveal, not in character count (a crisp final answer is often shorter than the
+    # level-3 reasoning that motivates it).
+    if not all(len(level) >= _MIN_LEVEL_CHARS for level in stripped):
+        return False
+    # Distinct: hints that repeat verbatim aren't graduated.
+    return len(set(stripped)) == NUM_LEVELS
 
 
 async def generate_hints(problem: Problem, *, chat_fn: ChatFn = complete_json) -> list[str]:
