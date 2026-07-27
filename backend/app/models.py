@@ -62,6 +62,12 @@ class Problem(Base):
     constraints_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     # list of {"input": str, "expected_output": str} — required to reach `ready`
     sample_tests: Mapped[list] = mapped_column(JSON, default=list)
+    # CF "Note": explains the sample cases, so it's shown AFTER the samples (not folded
+    # into the statement). Kept as its own field for correct placement + rendering.
+    note_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # User-uploaded diagrams the AI can't reproduce as text: [{"data_uri", "section"}]
+    # where section is "statement" | "note". Displayed inline; not fed to the tutor (yet).
+    figures: Mapped[list] = mapped_column(JSON, default=list)
     time_limit_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     memory_limit_mb: Mapped[int | None] = mapped_column(Integer, nullable=True)
     editorial_url: Mapped[str | None] = mapped_column(String(512), nullable=True)

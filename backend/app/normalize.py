@@ -31,6 +31,7 @@ class NormalizedProblem:
     statement: str
     constraints: str | None = None
     samples: list[dict] = field(default_factory=list)  # [{input, expected_output}]
+    note: str | None = None
     time_limit_ms: int | None = None
     memory_limit_mb: int | None = None
 
@@ -52,10 +53,18 @@ _SCHEMA: dict[str, Any] = {
                 "additionalProperties": False,
             },
         },
+        "note": {"type": "string"},
         "time_limit_ms": {"type": ["integer", "null"]},
         "memory_limit_mb": {"type": ["integer", "null"]},
     },
-    "required": ["statement", "constraints", "samples", "time_limit_ms", "memory_limit_mb"],
+    "required": [
+        "statement",
+        "constraints",
+        "samples",
+        "note",
+        "time_limit_ms",
+        "memory_limit_mb",
+    ],
     "additionalProperties": False,
 }
 
@@ -68,14 +77,18 @@ stitch them together in order). Rules:
 $$$n \\le 2 \\cdot 10^5$$$. Rendered copy-paste flattens math (e.g. "2⋅105" for $$$2 \\cdot 10^5$$$, \
 "∑i=lrai" for $$$\\sum_{i=l}^{r} a_i$$$) and breaks a line after every symbol — reconstruct the \
 intended LaTeX and rejoin the sentences.
-- `statement`: the problem description only (the prose before the Input/Output sections, plus any \
-"Note" explaining the examples).
+- `statement`: the problem description ONLY (the prose before the Input/Output sections). \
+Do NOT include the Note section here.
 - `constraints`: the INPUT format description AND the OUTPUT format description sections \
 (the prose telling how input/output are structured), together with all numeric bounds \
 (ranges on n, limits, sum-of-n, etc.). These format details are constraints, NOT samples. \
 If there is genuinely no such section, leave it an empty string.
 - `samples`: ONLY the concrete example input/output blocks, as {input, expected_output}, \
 preserving exact whitespace/newlines. Do not put format descriptions here.
+- `note`: the "Note"/"Notes" section that explains the sample cases, verbatim (math preserved). \
+Empty string if there is none.
+- Do NOT transcribe or describe any images/figures/diagrams — omit them entirely; the user \
+supplies figures separately.
 - Fill `time_limit_ms` and `memory_limit_mb` if stated (e.g. "1.5 seconds" -> 1500), else null.
 - Return only the JSON object."""
 
@@ -123,10 +136,12 @@ async def normalize(
         for s in data.get("samples", [])
         if isinstance(s, dict)
     ]
+    note = str(data.get("note", "")).strip() or None
     return NormalizedProblem(
         statement=statement,
         constraints=constraints,
         samples=samples,
+        note=note,
         time_limit_ms=data.get("time_limit_ms"),
         memory_limit_mb=data.get("memory_limit_mb"),
     )

@@ -43,6 +43,10 @@ def _apply_content(problem: Problem, payload: ProblemIngest) -> None:
         problem.constraints_text = payload.constraints_text
     if payload.sample_tests is not None:
         problem.sample_tests = [s.model_dump() for s in payload.sample_tests]
+    if payload.note_text is not None:
+        problem.note_text = payload.note_text
+    if payload.figures is not None:
+        problem.figures = [f.model_dump() for f in payload.figures]
     if payload.time_limit_ms is not None:
         problem.time_limit_ms = payload.time_limit_ms
     if payload.memory_limit_mb is not None:
@@ -68,6 +72,7 @@ async def normalize_input(payload: NormalizeRequest, user: CurrentUser):
         statement=result.statement,
         constraints=result.constraints,
         samples=result.samples,
+        note=result.note,
         time_limit_ms=result.time_limit_ms,
         memory_limit_mb=result.memory_limit_mb,
     )

@@ -8,6 +8,7 @@ def _payload():
         "statement": "You are given $$$n$$$ integers. Find two whose sum is $$$n$$$.",
         "constraints": "$$$1 \\le n \\le 100$$$",
         "samples": [{"input": "4", "expected_output": "2 2"}],
+        "note": "In the first sample, $$$2 + 2 = 4$$$.",
         "time_limit_ms": 2000,
         "memory_limit_mb": 256,
     }
@@ -22,8 +23,19 @@ async def test_normalize_text_parses_into_structured_problem():
     assert result.statement.startswith("You are given")
     assert result.constraints == "$$$1 \\le n \\le 100$$$"
     assert result.samples == [{"input": "4", "expected_output": "2 2"}]
+    assert result.note == "In the first sample, $$$2 + 2 = 4$$$."
     assert result.time_limit_ms == 2000
     assert result.memory_limit_mb == 256
+
+
+async def test_blank_note_becomes_none():
+    async def chat_fn(**kwargs):
+        p = _payload()
+        p["note"] = ""
+        return p
+
+    result = await normalize(text="x", chat_fn=chat_fn)
+    assert result.note is None
 
 
 async def test_screenshots_attach_all_images():

@@ -654,3 +654,51 @@ select {
   color: var(--muted);
   margin-bottom: 0.3rem;
 }
+.figures-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.figure-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.5rem;
+  border: 1px solid var(--border, #33405a);
+  border-radius: 8px;
+}
+.figure-thumb {
+  width: 120px;
+  height: 90px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--muted) 10%, transparent);
+}
+.figure-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.radio-row {
+  display: flex;
+  gap: 1rem;
+}
+.radio-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+}
+.figure-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+.figure-gallery img {
+  max-width: 100%;
+  max-height: 340px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #33405a);
+  background: #fff;
+}

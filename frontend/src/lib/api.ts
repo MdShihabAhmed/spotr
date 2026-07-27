@@ -100,6 +100,9 @@ export function logout(): void {
 
 export type SampleTest = { input: string; expected_output: string };
 
+/** A user-uploaded diagram tagged with the section it belongs to. */
+export type Figure = { data_uri: string; section: "statement" | "note" };
+
 export type IngestionStatus =
   | "pending"
   | "normalizing"
@@ -120,6 +123,10 @@ export type Problem = {
   statement_text: string;
   constraints_text: string | null;
   sample_tests: SampleTest[];
+  // CF "Note" (explains the samples); shown after them.
+  note_text: string | null;
+  // User-uploaded diagrams, rendered inline in their section.
+  figures: Figure[];
   time_limit_ms: number | null;
   memory_limit_mb: number | null;
   editorial_url: string | null;
@@ -141,6 +148,8 @@ export type IngestRequest = {
   statement_text?: string;
   constraints_text?: string;
   sample_tests?: SampleTest[];
+  note_text?: string;
+  figures?: Figure[];
   time_limit_ms?: number;
   memory_limit_mb?: number;
   editorial_url?: string;
@@ -157,6 +166,7 @@ export type NormalizedProblem = {
   statement: string;
   constraints: string | null;
   samples: SampleTest[];
+  note: string | null;
   time_limit_ms: number | null;
   memory_limit_mb: number | null;
 };

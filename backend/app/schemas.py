@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -41,12 +42,22 @@ class NormalizeRequest(BaseModel):
     images: list[str] | None = None
 
 
+class Figure(BaseModel):
+    """A user-uploaded diagram, tagged with the section it belongs to. `data_uri` is a
+    base64 `data:` URI. The AI can't reproduce figures as text, so the user supplies them."""
+
+    data_uri: str
+    section: Literal["statement", "note"] = "statement"
+
+
 class NormalizedOut(BaseModel):
     """Cleaned, structured problem for the user to review/edit before ingesting."""
 
     statement: str
     constraints: str | None
     samples: list[SampleTestIn]
+    # CF "Note" (explains the samples), kept separate so it renders after them.
+    note: str | None
     time_limit_ms: int | None
     memory_limit_mb: int | None
 
@@ -66,6 +77,8 @@ class ProblemIngest(BaseModel):
     statement_text: str | None = None
     constraints_text: str | None = None
     sample_tests: list[SampleTestIn] | None = None
+    note_text: str | None = None
+    figures: list[Figure] | None = None
     time_limit_ms: int | None = None
     memory_limit_mb: int | None = None
     editorial_url: str | None = None
@@ -88,6 +101,8 @@ class ProblemOut(BaseModel):
     statement_text: str
     constraints_text: str | None
     sample_tests: list[dict]
+    note_text: str | None
+    figures: list[dict]
     time_limit_ms: int | None
     memory_limit_mb: int | None
     editorial_url: str | None

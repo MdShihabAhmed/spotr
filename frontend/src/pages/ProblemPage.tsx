@@ -1,7 +1,20 @@
 import { Link, useParams } from "react-router-dom";
-import { ApiError, type IngestionStatus, type Problem } from "../lib/api";
+import { ApiError, type Figure, type IngestionStatus, type Problem } from "../lib/api";
 import { useProblem } from "../hooks/useProblems";
 import { MathText } from "../components/MathText";
+
+/** Diagrams the user attached to a given section, rendered as-is. */
+function Figures({ figures, section }: { figures: Figure[]; section: Figure["section"] }) {
+  const shown = figures.filter((f) => f.section === section);
+  if (shown.length === 0) return null;
+  return (
+    <div className="figure-gallery">
+      {shown.map((f, i) => (
+        <img key={i} src={f.data_uri} alt={`${section} figure ${i + 1}`} />
+      ))}
+    </div>
+  );
+}
 
 const STATUS_LABEL: Record<IngestionStatus, string> = {
   pending: "Queued",
@@ -115,6 +128,21 @@ function ProblemView({ problem }: { problem: Problem }) {
             </section>
           )}
 
+          {p.statement_text && (
+            <details className="card" open>
+              <summary>Statement</summary>
+              <MathText text={p.statement_text} />
+              <Figures figures={p.figures} section="statement" />
+            </details>
+          )}
+
+          {p.constraints_text && (
+            <details className="card">
+              <summary>Constraints</summary>
+              <MathText text={p.constraints_text} />
+            </details>
+          )}
+
           <section className="card">
             <h2>Sample tests</h2>
             {p.sample_tests.length === 0 ? (
@@ -137,18 +165,12 @@ function ProblemView({ problem }: { problem: Problem }) {
             )}
           </section>
 
-          {p.constraints_text && (
-            <details className="card">
-              <summary>Constraints</summary>
-              <MathText text={p.constraints_text} />
-            </details>
-          )}
-
-          {p.statement_text && (
-            <details className="card" open>
-              <summary>Statement</summary>
-              <MathText text={p.statement_text} />
-            </details>
+          {(p.note_text || p.figures.some((f) => f.section === "note")) && (
+            <section className="card">
+              <h2>Note</h2>
+              {p.note_text && <MathText text={p.note_text} />}
+              <Figures figures={p.figures} section="note" />
+            </section>
           )}
 
           {/* The editorial is deliberately NOT rendered — showing it would spoil the

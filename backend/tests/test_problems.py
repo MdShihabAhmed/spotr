@@ -35,6 +35,7 @@ async def test_normalize_returns_structured_problem(client, auth_headers, monkey
             statement="clean $$$n$$$",
             constraints="$$$1 \\le n$$$",
             samples=[{"input": "4", "expected_output": "2 2"}],
+            note="$$$2+2=4$$$",
             time_limit_ms=2000,
             memory_limit_mb=256,
         )
@@ -45,6 +46,7 @@ async def test_normalize_returns_structured_problem(client, auth_headers, monkey
     body = r.json()
     assert body["statement"] == "clean $$$n$$$"
     assert body["samples"] == [{"input": "4", "expected_output": "2 2"}]
+    assert body["note"] == "$$$2+2=4$$$"
     assert body["time_limit_ms"] == 2000
 
 
@@ -74,6 +76,25 @@ async def test_ingest_new_returns_202_and_schedules(client, auth_headers, schedu
     assert body["has_editorial"] is True
     assert "editorial_text" not in body
     assert scheduled == [body["id"]]
+
+
+async def test_ingest_stores_note_and_figures(client, auth_headers, scheduled):
+    r = await client.post(
+        "/problems/ingest",
+        json={
+            "url": PROBLEMSET_URL,
+            "note_text": "In sample 1, $$$2+2=4$$$.",
+            "figures": [
+                {"data_uri": "data:image/png;base64,AAAA", "section": "statement"},
+                {"data_uri": "data:image/png;base64,BBBB", "section": "note"},
+            ],
+        },
+        headers=auth_headers,
+    )
+    assert r.status_code == 202
+    body = r.json()
+    assert body["note_text"] == "In sample 1, $$$2+2=4$$$."
+    assert [f["section"] for f in body["figures"]] == ["statement", "note"]
 
 
 async def test_reingest_other_url_form_is_idempotent(client, auth_headers, scheduled):
