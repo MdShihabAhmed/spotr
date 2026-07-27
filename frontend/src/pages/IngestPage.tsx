@@ -2,8 +2,10 @@ import { useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, type SampleTest } from "../lib/api";
 import { useIngestProblem, useNormalize } from "../hooks/useProblems";
+import { MathText } from "../components/MathText";
 
 const EMPTY_SAMPLE: SampleTest = { input: "", expected_output: "" };
+const MAX_IMAGES = 5; // a long problem may span several screenshots
 type InputMode = "paste" | "screenshot";
 
 function fileToDataUri(file: File): Promise<string> {
@@ -22,7 +24,7 @@ export function IngestPage() {
 
   const [mode, setMode] = useState<InputMode>("paste");
   const [rawText, setRawText] = useState("");
-  const [image, setImage] = useState<string | null>(null);
+  const [images, setImages] = useState<string[]>([]);
 
   // Editable, structured problem — populated by AI extraction or typed directly.
   const [statement, setStatement] = useState("");
@@ -45,13 +47,16 @@ export function IngestPage() {
   const removeSample = (i: number) =>
     setSamples((prev) => (prev.length === 1 ? prev : prev.filter((_, j) => j !== i)));
 
-  async function onPickImage(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) setImage(await fileToDataUri(file));
+  async function onPickImages(e: ChangeEvent<HTMLInputElement>) {
+    const picked = Array.from(e.target.files ?? []);
+    e.target.value = ""; // let the same file be re-picked after a remove
+    const uris = await Promise.all(picked.map(fileToDataUri));
+    setImages((prev) => [...prev, ...uris].slice(0, MAX_IMAGES));
   }
+  const removeImage = (i: number) => setImages((prev) => prev.filter((_, j) => j !== i));
 
   function onExtract() {
-    const body = mode === "paste" ? { text: rawText.trim() } : { image: image ?? undefined };
+    const body = mode === "paste" ? { text: rawText.trim() } : { images };
     normalize.mutate(body, {
       onSuccess: (n) => {
         setStatement(n.statement);
@@ -81,7 +86,7 @@ export function IngestPage() {
     );
   }
 
-  const canExtract = mode === "paste" ? rawText.trim().length > 0 : image != null;
+  const canExtract = mode === "paste" ? rawText.trim().length > 0 : images.length > 0;
   const err = normalize.error ?? ingest.error;
   const message =
     err instanceof ApiError
@@ -167,8 +172,33 @@ export function IngestPage() {
             />
           ) : (
             <div className="screenshot-pick">
-              <input type="file" accept="image/*" onChange={onPickImage} />
-              {image && <img src={image} alt="problem screenshot" className="ss-preview" />}
+              {images.length > 0 && (
+                <div className="ss-grid">
+                  {images.map((src, i) => (
+                    <div key={i} className="ss-thumb">
+                      <img src={src} alt={`screenshot ${i + 1}`} />
+                      <button
+                        type="button"
+                        className="ss-remove"
+                        aria-label={`Remove screenshot ${i + 1}`}
+                        onClick={() => removeImage(i)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {images.length < MAX_IMAGES && (
+                <label className="ss-add">
+                  + Add screenshot{images.length > 0 ? "s" : ""}
+                  <input type="file" accept="image/*" multiple onChange={onPickImages} hidden />
+                </label>
+              )}
+              <p className="hint">
+                Add up to {MAX_IMAGES} — capture a long problem in parts (statement, then
+                constraints, then samples) and they're stitched together.
+              </p>
             </div>
           )}
 
@@ -192,14 +222,26 @@ export function IngestPage() {
                 value={statement}
                 onChange={(e) => setStatement(e.target.value)}
               />
+              {statement.trim() && (
+                <div className="render-preview">
+                  <span className="render-preview-tag">Rendered</span>
+                  <MathText text={statement} />
+                </div>
+              )}
 
-              <label htmlFor="constraints">Constraints</label>
+              <label htmlFor="constraints">Constraints (input/output format + bounds)</label>
               <textarea
                 id="constraints"
                 rows={3}
                 value={constraints}
                 onChange={(e) => setConstraints(e.target.value)}
               />
+              {constraints.trim() && (
+                <div className="render-preview">
+                  <span className="render-preview-tag">Rendered</span>
+                  <MathText text={constraints} />
+                </div>
+              )}
 
               <label>Sample tests</label>
               <div className="samples-editor">

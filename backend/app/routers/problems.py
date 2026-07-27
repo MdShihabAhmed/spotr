@@ -58,10 +58,10 @@ async def normalize_input(payload: NormalizeRequest, user: CurrentUser):
     """Clean pasted text / a screenshot into structured `{statement, constraints,
     samples, limits}` for the user to review before ingesting. Synchronous (one LLM
     call) so the user confirms the extraction — vision/paste can err."""
-    if not payload.text and not payload.image:
+    if not payload.text and not payload.images:
         raise ApiError(400, "empty_input", "Provide pasted text or a screenshot to normalize.")
     try:
-        result = await normalize(text=payload.text, image_data_uri=payload.image)
+        result = await normalize(text=payload.text, image_data_uris=payload.images)
     except NormalizeError as exc:
         raise ApiError(422, "normalization_failed", str(exc))
     return NormalizedOut(

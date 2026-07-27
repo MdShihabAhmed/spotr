@@ -161,8 +161,9 @@ export type NormalizedProblem = {
   memory_limit_mb: number | null;
 };
 
-/** Send pasted text and/or a screenshot data-URI; get back clean structured fields. */
-export const normalizeProblem = (body: { text?: string; image?: string }) =>
+/** Send pasted text and/or screenshot data-URIs; get back clean structured fields.
+ *  Multiple images let a long problem be captured across several screenshots. */
+export const normalizeProblem = (body: { text?: string; images?: string[] }) =>
   api.post<NormalizedProblem>("/problems/normalize", body);
 
 /** /login is form-encoded (OAuth2PasswordRequestForm), unlike every other endpoint. */

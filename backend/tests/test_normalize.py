@@ -26,15 +26,16 @@ async def test_normalize_text_parses_into_structured_problem():
     assert result.memory_limit_mb == 256
 
 
-async def test_screenshot_attaches_image():
+async def test_screenshots_attach_all_images():
     seen = {}
 
     async def chat_fn(**kwargs):
         seen["images"] = kwargs["images"]
         return _payload()
 
-    await normalize(image_data_uri="data:image/png;base64,AAAA", chat_fn=chat_fn)
-    assert seen["images"] == ["data:image/png;base64,AAAA"]
+    uris = ["data:image/png;base64,AAAA", "data:image/png;base64,BBBB"]
+    await normalize(image_data_uris=uris, chat_fn=chat_fn)
+    assert seen["images"] == uris  # all parts sent together, in order
 
 
 async def test_requires_some_input():

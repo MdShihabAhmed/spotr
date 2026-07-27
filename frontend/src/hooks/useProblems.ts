@@ -17,7 +17,7 @@ export function useIngestProblem() {
 /** Clean pasted text / a screenshot into structured fields for review (one LLM call). */
 export function useNormalize() {
   return useMutation({
-    mutationFn: (body: { text?: string; image?: string }) => normalizeProblem(body),
+    mutationFn: (body: { text?: string; images?: string[] }) => normalizeProblem(body),
   });
 }
 

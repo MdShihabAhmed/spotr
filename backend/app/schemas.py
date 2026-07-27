@@ -33,11 +33,12 @@ class SampleTestIn(BaseModel):
 
 
 class NormalizeRequest(BaseModel):
-    """Raw problem input to clean: pasted `text` and/or a screenshot `image` (a `data:`
-    URI, base64). At least one must be provided."""
+    """Raw problem input to clean: pasted `text` and/or one or more screenshot `images`
+    (each a `data:` URI, base64). At least one of `text`/`images` must be provided.
+    Multiple images let a long problem be captured across several screenshots."""
 
     text: str | None = None
-    image: str | None = None
+    images: list[str] | None = None
 
 
 class NormalizedOut(BaseModel):

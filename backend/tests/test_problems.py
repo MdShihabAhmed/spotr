@@ -29,7 +29,7 @@ async def test_ingest_requires_auth(client):
 async def test_normalize_returns_structured_problem(client, auth_headers, monkeypatch):
     from app.normalize import NormalizedProblem
 
-    async def fake_normalize(*, text=None, image_data_uri=None):
+    async def fake_normalize(*, text=None, image_data_uris=None):
         assert text == "messy paste"
         return NormalizedProblem(
             statement="clean $$$n$$$",

@@ -61,31 +61,43 @@ _SCHEMA: dict[str, Any] = {
 
 _SYSTEM = """\
 You extract a competitive-programming problem into clean, structured fields from a user's \
-pasted text or a screenshot. Rules:
+pasted text or one or more screenshots (which may be consecutive parts of the SAME problem — \
+stitch them together in order). Rules:
 - Reproduce the FULL problem statement faithfully. Do not summarize, solve, or add commentary.
 - Preserve all mathematics as Codeforces-style LaTeX delimited by triple dollars, e.g. \
-$$$n \\le 2 \\cdot 10^5$$$. Fix broken/duplicated math and line breaks from copy-paste.
-- Put the input format / constraints section (bounds on n, ranges, etc.) in `constraints`; \
-if there is no distinct section, leave it an empty string.
-- Extract every sample test as {input, expected_output}, preserving exact whitespace/newlines.
-- Fill `time_limit_ms` and `memory_limit_mb` if stated (e.g. "2 seconds" -> 2000), else null.
+$$$n \\le 2 \\cdot 10^5$$$. Rendered copy-paste flattens math (e.g. "2⋅105" for $$$2 \\cdot 10^5$$$, \
+"∑i=lrai" for $$$\\sum_{i=l}^{r} a_i$$$) and breaks a line after every symbol — reconstruct the \
+intended LaTeX and rejoin the sentences.
+- `statement`: the problem description only (the prose before the Input/Output sections, plus any \
+"Note" explaining the examples).
+- `constraints`: the INPUT format description AND the OUTPUT format description sections \
+(the prose telling how input/output are structured), together with all numeric bounds \
+(ranges on n, limits, sum-of-n, etc.). These format details are constraints, NOT samples. \
+If there is genuinely no such section, leave it an empty string.
+- `samples`: ONLY the concrete example input/output blocks, as {input, expected_output}, \
+preserving exact whitespace/newlines. Do not put format descriptions here.
+- Fill `time_limit_ms` and `memory_limit_mb` if stated (e.g. "1.5 seconds" -> 1500), else null.
 - Return only the JSON object."""
 
 
 def _build_user_prompt(text: str | None) -> str:
     if text:
         return "Here is the pasted problem. Clean and structure it:\n\n" + text
-    return "Read the attached screenshot of the problem and structure it."
+    return "Read the attached screenshot(s) of the problem and structure it."
 
 
 async def normalize(
     *,
     text: str | None = None,
-    image_data_uri: str | None = None,
+    image_data_uris: list[str] | None = None,
     chat_fn: ChatFn = complete_json,
 ) -> NormalizedProblem:
-    """Return a cleaned `NormalizedProblem` from pasted text or a screenshot data URI."""
-    if not text and not image_data_uri:
+    """Return a cleaned `NormalizedProblem` from pasted text and/or screenshot data URIs.
+
+    Multiple screenshots are supported so a long problem can be captured in parts; they're
+    sent together and stitched into one problem by the model.
+    """
+    if not text and not image_data_uris:
         raise NormalizeError("provide either pasted text or a screenshot")
 
     model = get_settings().llm_model_strong  # math/vision fidelity matters here
@@ -96,7 +108,7 @@ async def normalize(
             user=_build_user_prompt(text),
             schema=_SCHEMA,
             schema_name="normalized_problem",
-            images=[image_data_uri] if image_data_uri else None,
+            images=image_data_uris or None,
         )
     except LLMError as exc:
         raise NormalizeError(f"normalization failed: {exc}") from exc
