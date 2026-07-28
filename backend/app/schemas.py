@@ -117,3 +117,46 @@ class ProblemOut(BaseModel):
     # Number of ladder levels generated (0–4). Content is never exposed here — the
     # tutor serves levels one at a time via the revealed-set disclosure flow (step 6).
     level_count: int = 0
+
+
+# --- Tutor (step 6) ----------------------------------------------------------
+class RevealedLevel(BaseModel):
+    """An UNLOCKED ladder rung. Only revealed levels are ever serialized — locked content
+    stays server-side (the no-leakage guarantee)."""
+
+    level: int
+    content: str
+
+
+class TutorMessageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    role: str  # "user" | "assistant"
+    content: str
+    # Grounding chunks the assistant cited: [{source, title, url, page}].
+    citations: list[dict] | None = None
+    created_at: datetime
+
+
+class TutorSessionOut(BaseModel):
+    """Full tutor state for a problem: which rungs are unlocked (with content), how many
+    remain, the run status, and the durable chat history."""
+
+    slug: str
+    status: str  # "active" | "solved" | "gave_up"
+    revealed_levels: list[int]
+    revealed: list[RevealedLevel]  # unlocked rung contents, in order
+    level_count: int  # total rungs (so the UI can show N locked)
+    messages: list[TutorMessageOut]
+
+
+class RevealOut(BaseModel):
+    """Result of a manual sequential reveal — the newly unlocked rung + the updated set."""
+
+    level: int
+    content: str
+    revealed_levels: list[int]
+
+
+class MessageRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=4000)

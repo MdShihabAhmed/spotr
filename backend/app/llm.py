@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 from functools import lru_cache
 from typing import Any
 
@@ -99,6 +100,31 @@ async def complete_json(
         return json.loads(content)
     except (json.JSONDecodeError, TypeError) as exc:
         raise LLMError(f"model did not return valid JSON: {exc}") from exc
+
+
+async def stream_completion(
+    *, model: str, messages: list[dict[str, Any]]
+) -> AsyncIterator[str]:
+    """Stream a chat completion as text deltas. Used by the tutor so multi-second replies
+    type out live instead of hanging behind a spinner. `messages` is the full thread
+    (system + history + new user turn). Raises `LLMError` on failure."""
+    settings = get_settings()
+    if not settings.openai_api_key:
+        raise LLMError("LLM API key is not set (OPENAI_API_KEY in .env)")
+    try:
+        stream = await get_client().chat.completions.create(
+            model=model, messages=messages, stream=True
+        )
+        async for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield delta
+    except LLMError:
+        raise
+    except Exception as exc:
+        raise LLMError(f"LLM stream failed: {exc}") from exc
 
 
 async def embed_texts(texts: list[str], *, model: str | None = None) -> list[list[float]]:
