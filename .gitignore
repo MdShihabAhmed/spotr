@@ -14,3 +14,11 @@ dist/
 # editors
 .idea/
 .vscode/
+
+# local tooling / generated
+.claude/
+corpora/
+
+# local-only working docs (kept on disk, never committed)
+/CLAUDE.md
+/guide.md

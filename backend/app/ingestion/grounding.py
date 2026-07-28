@@ -16,7 +16,7 @@ Design decisions:
 - **Everything injectable** (`embed_fn`, `client`, `session_maker`) so ingestion is tested
   offline against an in-memory Qdrant with a fake embedder — no network, no service.
 
-Corpora (see guide.md "Data Sourcing & Grounding"): CP-Algorithms (CC BY-SA) is the
+Corpora: CP-Algorithms (CC BY-SA) is the
 flagship prose corpus and is fully implemented; PyRival (Apache-2.0) adds reference
 implementations. USACO Guide (MDX) and the CP Handbook (PDF) have registered loaders whose
 parsing is left as a marked extension point — the framework ingests any `CorpusLoader`.

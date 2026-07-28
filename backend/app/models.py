@@ -1,6 +1,6 @@
 """Database models for the grounded Socratic tutor (six tables).
 
-Re-architected 2026-07-27 (see guide.md "Data Model"):
+The six-table schema:
 - `Problem` is **source-agnostic** — a `slug` ("{source}-{external_id}", e.g. "cf-1846C")
   is the public/route id; `source` + `external_id` are the identity. Codeforces-specific
   bits live in `source_metadata` so the CF API path needs no re-parsing.

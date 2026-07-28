@@ -176,6 +176,92 @@ export type NormalizedProblem = {
 export const normalizeProblem = (body: { text?: string; images?: string[] }) =>
   api.post<NormalizedProblem>("/problems/normalize", body);
 
+// --- Tutor (grounded Socratic chat + revealed-set disclosure) ----------------
+/** A grounding chunk the tutor cited (provenance for the "Grounded by" credit). */
+export type Citation = { source: string; title: string; url: string; page: number | null };
+
+export type TutorMessage = {
+  role: "user" | "assistant";
+  content: string;
+  citations: Citation[] | null;
+  created_at: string;
+};
+
+/** An UNLOCKED ladder rung. Locked rungs are never sent — that's the no-leakage guarantee. */
+export type RevealedLevel = { level: number; content: string };
+
+export type TutorSession = {
+  slug: string;
+  status: "active" | "solved" | "gave_up";
+  revealed_levels: number[];
+  revealed: RevealedLevel[];
+  level_count: number;
+  messages: TutorMessage[];
+};
+
+export type RevealResult = { level: number; content: string; revealed_levels: number[] };
+
+export const getTutorSession = (slug: string) => api.get<TutorSession>(`/tutor/${slug}`);
+
+export const revealNextLevel = (slug: string) =>
+  api.post<RevealResult>(`/tutor/${slug}/reveal`);
+
+/** Bearer-authorized fetch that transparently refreshes once on a 401, returning the raw
+ *  Response — used for the SSE stream, which `apiFetch` (JSON-only) can't handle. */
+export async function authorizedFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  let resp = await send(path, init);
+  if (resp.status === 401 && tokens.refresh()) {
+    if (await ensureRefreshed()) resp = await send(path, init);
+  }
+  return resp;
+}
+
+export type TutorStreamHandlers = {
+  onToken: (text: string) => void;
+  onUnlock: (level: number) => void;
+  onDone: (info: { revealed_levels: number[]; unlocked: number | null; citations: Citation[] }) => void;
+  onError: (detail: string) => void;
+};
+
+/** POST a chat turn and consume the Server-Sent-Events stream, dispatching each frame.
+ *  (EventSource can't send auth headers or a POST body, so we read the stream by hand.) */
+export async function streamTutorMessage(
+  slug: string,
+  content: string,
+  h: TutorStreamHandlers,
+): Promise<void> {
+  const resp = await authorizedFetch(`/tutor/${slug}/message`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  });
+  if (!resp.ok || !resp.body) {
+    const body = await resp.json().catch(() => ({}));
+    h.onError(body.detail ?? "The tutor request failed.");
+    return;
+  }
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    // SSE frames are separated by a blank line; keep any partial trailing frame buffered.
+    const frames = buffer.split("\n\n");
+    buffer = frames.pop() ?? "";
+    for (const frame of frames) {
+      const line = frame.split("\n").find((l) => l.startsWith("data:"));
+      if (!line) continue;
+      const evt = JSON.parse(line.slice(5).trim());
+      if (evt.type === "token") h.onToken(evt.text);
+      else if (evt.type === "unlock") h.onUnlock(evt.level);
+      else if (evt.type === "done") h.onDone(evt);
+      else if (evt.type === "error") h.onError(evt.detail);
+    }
+  }
+}
+
 /** /login is form-encoded (OAuth2PasswordRequestForm), unlike every other endpoint. */
 export async function login(email: string, password: string): Promise<void> {
   const resp = await fetch(`${BASE_URL}/login`, {

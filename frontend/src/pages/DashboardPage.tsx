@@ -5,7 +5,7 @@ import { useCurrentUser } from "../hooks/useAuth";
 
 type Health = { status: string };
 
-/** Mirrors guide.md's build order. Kept honest on purpose: shipped means shipped. */
+/** The build order. Kept honest on purpose: shipped means shipped. */
 const ROADMAP = [
   { step: 1, name: "Foundation — auth, database, cache", done: true },
   { step: 2, name: "Re-architecture — source-agnostic schema + source abstraction", done: true },

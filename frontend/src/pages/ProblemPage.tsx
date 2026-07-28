@@ -178,10 +178,16 @@ function ProblemView({ problem }: { problem: Problem }) {
           <section className="card">
             <h2>Tutor</h2>
             {p.level_count > 0 ? (
-              <p className="muted">
-                ✓ {p.level_count}-level hint ladder built from the editorial (kept hidden so it stays
-                meaningful). The Socratic tutor — revealing one level at a time — ships next.
-              </p>
+              <div className="stack">
+                <p className="muted">
+                  ✓ {p.level_count}-level hint ladder built from the editorial (kept hidden so it
+                  stays meaningful). Work through it with the Socratic tutor — it reveals one level
+                  at a time and unlocks a hint when you figure it out yourself.
+                </p>
+                <Link to={`/problems/${p.slug}/tutor`} className="btn btn-primary">
+                  Open the tutor →
+                </Link>
+              </div>
             ) : p.has_editorial ? (
               <p className="muted">
                 Editorial captured and hidden; the hint ladder will appear here once generated.

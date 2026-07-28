@@ -7,6 +7,7 @@ import { IngestPage } from './pages/IngestPage'
 import { LoginPage } from './pages/LoginPage'
 import { ProblemPage } from './pages/ProblemPage'
 import { RegisterPage } from './pages/RegisterPage'
+import { TutorPage } from './pages/TutorPage'
 import './App.css'
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -44,6 +45,14 @@ function App() {
           element={
             <Protected>
               <ProblemPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/problems/:slug/tutor"
+          element={
+            <Protected>
+              <TutorPage />
             </Protected>
           }
         />

@@ -6,7 +6,7 @@
 # "sending SIGKILL". Running each service in its OWN console means Ctrl+C goes
 # straight to that process — uvicorn's reloader then reaps its own worker
 # cleanly, the way it's designed to. `--reload` is still required on Windows
-# (psycopg needs the selector event loop; see CLAUDE.md).
+# (psycopg needs the selector event loop, which --reload sets up).
 
 $root     = $PSScriptRoot
 $backend  = Join-Path $root 'backend'
