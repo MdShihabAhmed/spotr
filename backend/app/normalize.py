@@ -16,7 +16,6 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.config import get_settings
 from app.llm import LLMError, complete_json
 
 ChatFn = Callable[..., Awaitable[dict[str, Any]]]
@@ -113,10 +112,9 @@ async def normalize(
     if not text and not image_data_uris:
         raise NormalizeError("provide either pasted text or a screenshot")
 
-    model = get_settings().llm_model_strong  # math/vision fidelity matters here
     try:
         data = await chat_fn(
-            model=model,
+            task="normalize",  # needs vision + structured output (math/vision fidelity)
             system=_SYSTEM,
             user=_build_user_prompt(text),
             schema=_SCHEMA,

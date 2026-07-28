@@ -1,6 +1,23 @@
+from dataclasses import dataclass
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+@dataclass(frozen=True)
+class LlmProfile:
+    """A resolved (provider, key, model) for one task. `base_url=""` = the SDK default
+    (OpenAI)."""
+
+    base_url: str
+    api_key: str
+    model: str
+
+
+# Each task can use its own provider/model — a future model that's better at one job (e.g.
+# vision extraction, or the cheap judge) can be slotted in without moving the rest. Every
+# task falls back to the single global key/endpoint unless explicitly overridden.
+LLM_TASKS = ("normalize", "hints", "chat", "judge", "embedding")
 
 
 class Settings(BaseSettings):
@@ -15,11 +32,31 @@ class Settings(BaseSettings):
     # LLM. Provider-agnostic: any OpenAI-compatible endpoint works by setting
     # `llm_base_url` + `openai_api_key` + model names. Empty base_url = OpenAI itself.
     # Default .env targets Google Gemini's free-tier OpenAI-compatible endpoint.
+    # THIS IS THE GLOBAL DEFAULT — every task uses it unless overridden below.
     openai_api_key: str = ""  # the bearer token for whichever provider llm_base_url points at
     llm_base_url: str = ""  # e.g. Gemini: https://generativelanguage.googleapis.com/v1beta/openai/
-    llm_model_strong: str = "gpt-5.2"
-    llm_model_fast: str = "gpt-5-mini"
+    llm_model_strong: str = "gpt-5.2"  # default for normalize / hints / chat
+    llm_model_fast: str = "gpt-5-mini"  # default for the cheap judge
     embedding_model: str = "text-embedding-3-small"
+
+    # Per-task overrides — ALL optional; blank means "use the global default above". Set
+    # only what you want to route elsewhere (e.g. CHAT_BASE_URL + CHAT_API_KEY + CHAT_MODEL
+    # to run the tutor on a different provider than normalization). See README "LLM
+    # configuration" for which tasks need which provider features.
+    normalize_model: str = ""
+    normalize_base_url: str = ""
+    normalize_api_key: str = ""
+    hints_model: str = ""
+    hints_base_url: str = ""
+    hints_api_key: str = ""
+    chat_model: str = ""
+    chat_base_url: str = ""
+    chat_api_key: str = ""
+    judge_model: str = ""
+    judge_base_url: str = ""
+    judge_api_key: str = ""
+    embedding_base_url: str = ""
+    embedding_api_key: str = ""
 
     # Grounding (RAG over the openly-licensed corpora). The Qdrant collection name embeds
     # the embedding model: changing the model means a different vector space, so it must be
@@ -50,6 +87,33 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    def llm_profile(self, task: str) -> LlmProfile:
+        """Resolve (base_url, api_key, model) for a task: a per-task override if set,
+        otherwise the global default. This is what makes one key 'just work' for
+        everything while still allowing a different provider per task."""
+        if task not in LLM_TASKS:
+            raise ValueError(f"unknown LLM task: {task!r}")
+        default_model = {
+            "normalize": self.llm_model_strong,  # needs vision + structured output
+            "hints": self.llm_model_strong,  # needs structured output
+            "chat": self.llm_model_strong,  # needs streaming
+            "judge": self.llm_model_fast,  # needs structured output (cheap)
+            "embedding": self.embedding_model,  # needs an embeddings endpoint
+        }[task]
+        override = {
+            "normalize": (self.normalize_base_url, self.normalize_api_key, self.normalize_model),
+            "hints": (self.hints_base_url, self.hints_api_key, self.hints_model),
+            "chat": (self.chat_base_url, self.chat_api_key, self.chat_model),
+            "judge": (self.judge_base_url, self.judge_api_key, self.judge_model),
+            "embedding": (self.embedding_base_url, self.embedding_api_key, ""),
+        }[task]
+        base_url, api_key, model = override
+        return LlmProfile(
+            base_url=base_url or self.llm_base_url,
+            api_key=api_key or self.openai_api_key,
+            model=model or default_model,
+        )
 
     @property
     def grounding_collection(self) -> str:

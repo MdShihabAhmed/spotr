@@ -61,11 +61,12 @@ async def _create_with_retry(make_call: Callable[[], Awaitable[_T]]) -> _T:
 
 
 @lru_cache
-def get_client() -> AsyncOpenAI:
+def _client_for(base_url: str, api_key: str) -> AsyncOpenAI:
+    """One SDK client per (endpoint, key) — cached, since per-task routing may use several.
+    `base_url=""` means the SDK default (OpenAI); any other value points the same SDK at an
+    OpenAI-compatible provider (Gemini/Groq/Ollama/…)."""
     settings = get_settings()
-    # base_url="" means the SDK's default (OpenAI). Any other value points the same SDK
-    # at an OpenAI-compatible provider (Gemini/Groq/Ollama/…). None lets the SDK default.
-    base_url = settings.llm_base_url or None
+    url = base_url or None
     if settings.langfuse_public_key and settings.langfuse_secret_key:
         try:
             from langfuse import Langfuse
@@ -78,32 +79,41 @@ def get_client() -> AsyncOpenAI:
             )
             from langfuse.openai import AsyncOpenAI as TracedAsyncOpenAI
 
-            return TracedAsyncOpenAI(api_key=settings.openai_api_key, base_url=base_url)
+            return TracedAsyncOpenAI(api_key=api_key, base_url=url)
         except Exception:
             # Tracing is best-effort; never let it stop real work.
             pass
-    return AsyncOpenAI(api_key=settings.openai_api_key, base_url=base_url)
+    return AsyncOpenAI(api_key=api_key, base_url=url)
+
+
+def _resolve(task: str):
+    """(client, model) for a task, or raise a clear LLMError when no key is configured."""
+    profile = get_settings().llm_profile(task)
+    if not profile.api_key:
+        raise LLMError(
+            f"No API key configured for the {task!r} task (set OPENAI_API_KEY, or a "
+            f"per-task key like {task.upper()}_API_KEY)."
+        )
+    return _client_for(profile.base_url, profile.api_key), profile.model
 
 
 async def complete_json(
     *,
-    model: str,
+    task: str,
     system: str,
     user: str,
     schema: dict[str, Any],
     schema_name: str = "response",
     images: list[str] | None = None,
 ) -> dict[str, Any]:
-    """One structured-output chat call. Returns parsed JSON matching `schema`.
+    """One structured-output chat call for `task`. Returns parsed JSON matching `schema`.
 
-    `images` are `data:` URIs (base64) attached to the user message for multimodal
-    calls (e.g. reading a problem screenshot). Raises `LLMError` if the key is missing,
-    the call fails, or the output isn't valid JSON — callers turn that into a clear
-    failure, never a 500.
+    The task selects the provider/model (see `Settings.llm_profile`). `images` are `data:`
+    URIs (base64) attached to the user message for multimodal calls (e.g. reading a problem
+    screenshot). Raises `LLMError` if no key is configured, the call fails, or the output
+    isn't valid JSON — callers turn that into a clear failure, never a 500.
     """
-    settings = get_settings()
-    if not settings.openai_api_key:
-        raise LLMError("LLM API key is not set (OPENAI_API_KEY in .env)")
+    client, model = _resolve(task)
 
     if images:
         user_content: Any = [{"type": "text", "text": user}]
@@ -113,7 +123,7 @@ async def complete_json(
 
     try:
         resp = await _create_with_retry(
-            lambda: get_client().chat.completions.create(
+            lambda: client.chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": system},
@@ -138,17 +148,15 @@ async def complete_json(
 
 
 async def stream_completion(
-    *, model: str, messages: list[dict[str, Any]]
+    *, task: str, messages: list[dict[str, Any]]
 ) -> AsyncIterator[str]:
     """Stream a chat completion as text deltas. Used by the tutor so multi-second replies
     type out live instead of hanging behind a spinner. `messages` is the full thread
     (system + history + new user turn). Raises `LLMError` on failure."""
-    settings = get_settings()
-    if not settings.openai_api_key:
-        raise LLMError("LLM API key is not set (OPENAI_API_KEY in .env)")
+    client, model = _resolve(task)
     try:
         stream = await _create_with_retry(
-            lambda: get_client().chat.completions.create(
+            lambda: client.chat.completions.create(
                 model=model, messages=messages, stream=True
             )
         )
@@ -164,9 +172,9 @@ async def stream_completion(
         raise LLMError(f"LLM stream failed: {exc}") from exc
 
 
-async def embed_texts(texts: list[str], *, model: str | None = None) -> list[list[float]]:
-    """Embed a batch of texts via the same provider-agnostic client (Gemini
-    `gemini-embedding-001` by default). Returns one vector per input, order-preserved.
+async def embed_texts(texts: list[str], *, task: str = "embedding") -> list[list[float]]:
+    """Embed a batch of texts via the task's provider (Gemini `gemini-embedding-001` by
+    default). Returns one vector per input, order-preserved.
 
     Used by grounding ingestion (embed corpus chunks) and the tutor (embed the query for
     retrieval). Raises `LLMError` so callers never surface a raw provider error. The model
@@ -174,13 +182,11 @@ async def embed_texts(texts: list[str], *, model: str | None = None) -> list[lis
     why the collection name encodes the model (see `Settings.grounding_collection`)."""
     if not texts:
         return []
-    settings = get_settings()
-    if not settings.openai_api_key:
-        raise LLMError("LLM API key is not set (OPENAI_API_KEY in .env)")
+    client, model = _resolve(task)
     try:
         resp = await _create_with_retry(
-            lambda: get_client().embeddings.create(
-                model=model or settings.embedding_model,
+            lambda: client.embeddings.create(
+                model=model,
                 input=texts,
             )
         )

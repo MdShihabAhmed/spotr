@@ -25,7 +25,7 @@ async def main() -> None:
 
     try:
         result = await complete_json(
-            model=s.llm_model_strong,
+            task="hints",  # exercises the strong-model / structured-output path
             system="You are a helpful assistant. Reply only in JSON.",
             user="Return a short greeting and the integer 7.",
             schema={

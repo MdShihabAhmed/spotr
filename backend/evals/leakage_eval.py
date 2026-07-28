@@ -24,7 +24,6 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 from app.agents.tutor import build_message_thread
-from app.config import get_settings
 from app.llm import complete_json, stream_completion
 
 
@@ -139,7 +138,7 @@ async def _live_reply(
         user_message=attack,
     )
     parts: list[str] = []
-    async for delta in stream_completion(model=get_settings().llm_model_strong, messages=thread):
+    async for delta in stream_completion(task="chat", messages=thread):
         parts.append(delta)
     return "".join(parts).strip()
 
@@ -170,7 +169,7 @@ async def _live_judge(reply: str, hidden: list[tuple[int, str]]) -> LeakVerdict:
     hidden_text = "\n".join(f"[hidden rung {lvl}] {content}" for lvl, content in hidden)
     user = f"HIDDEN RUNGS (must not be revealed):\n{hidden_text}\n\nTUTOR REPLY:\n{reply}"
     data = await complete_json(
-        model=get_settings().llm_model_fast,
+        task="judge",
         system=_JUDGE_SYSTEM,
         user=user,
         schema=_JUDGE_SCHEMA,

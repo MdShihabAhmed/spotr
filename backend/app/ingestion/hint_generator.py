@@ -16,7 +16,6 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from app.config import get_settings
 from app.llm import LLMError, complete_json
 from app.models import Problem
 
@@ -103,13 +102,12 @@ async def generate_hints(problem: Problem, *, chat_fn: ChatFn = complete_json) -
     LLM call.
     """
     user = _build_user_prompt(problem)
-    model = get_settings().llm_model_strong
     last_error = "unknown"
 
     for _ in range(2):  # one retry
         try:
             data = await chat_fn(
-                model=model,
+                task="hints",
                 system=_SYSTEM,
                 user=user,
                 schema=_SCHEMA,

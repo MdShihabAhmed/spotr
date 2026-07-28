@@ -18,7 +18,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.config import get_settings
 from app.llm import complete_json
 from app.vector_store import GroundingHit
 
@@ -152,11 +151,10 @@ async def judge_disclosure(
     """Conservative judge: did the student's message demonstrate the *next* level's insight
     on their own? Runs on the fast model (cheap). Any failure → not demonstrated (fail
     closed — never unlock on an error)."""
-    settings = get_settings()
     user = f"TARGET HINT (the hidden insight to check for):\n{target_hint}\n\nSTUDENT MESSAGE:\n{user_message}"
     try:
         data = await chat_fn(
-            model=settings.llm_model_fast,
+            task="judge",
             system=_JUDGE_SYSTEM,
             user=user,
             schema=_JUDGE_SCHEMA,

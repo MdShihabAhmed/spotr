@@ -26,7 +26,6 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.tutor import build_message_thread, judge_disclosure
-from app.config import get_settings
 from app.database import async_session_maker
 from app.dependencies import CurrentUser, DbSession
 from app.errors import ApiError
@@ -154,7 +153,6 @@ async def _stream_turn(*, user_id: int, problem_id: int, content: str) -> AsyncI
     """The turn: persist the user message, retrieve grounding, maybe auto-unlock the next
     rung, then stream a grounded reply and persist it. Yields SSE `data:` frames of shape
     {type: "unlock"|"token"|"done"|"error", …}."""
-    settings = get_settings()
     async with async_session_maker() as db:
         problem = await db.get(Problem, problem_id)
         session = await _get_or_create_session(db, user_id, problem_id)
@@ -209,7 +207,7 @@ async def _stream_turn(*, user_id: int, problem_id: int, content: str) -> AsyncI
 
         reply_parts: list[str] = []
         try:
-            async for delta in stream_completion(model=settings.llm_model_strong, messages=thread):
+            async for delta in stream_completion(task="chat", messages=thread):
                 reply_parts.append(delta)
                 yield _sse({"type": "token", "text": delta})
         except Exception as exc:
