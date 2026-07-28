@@ -94,28 +94,38 @@ class CodeforcesSource(ProblemSource):
                 )
         return None
 
-    async def fetch_editorial(self, editorial_url: str) -> str | None:
+    async def fetch_editorial(self, editorial_url: str) -> str:
+        """Editorial text via `blogEntry.view`. Raises `SourceError` (with a
+        user-actionable reason) on every failure path — a swallowed `None` here would
+        surface downstream as an unexplained "no editorial captured"."""
         blog_id = parse_blog_id(editorial_url)
         if blog_id is None:
-            return None
+            raise SourceError(
+                f"{editorial_url!r} isn't a Codeforces blog link "
+                "(expected a .../blog/entry/<id> URL)"
+            )
         http, owns = self._client()
         try:
             await self._throttle()
             resp = await http.get(f"{API_BASE}/blogEntry.view", params={"blogEntryId": blog_id})
             resp.raise_for_status()
             body = resp.json()
-        except (httpx.HTTPError, ValueError):
-            return None
+        except (httpx.HTTPError, ValueError) as exc:
+            raise SourceError(f"blogEntry.view request failed: {exc}") from exc
         finally:
             if owns:
                 await http.aclose()
         if body.get("status") != "OK":
-            return None
+            # CF puts the human reason in `comment` (e.g. "Blog entry ... not found").
+            raise SourceError(f"Codeforces API: {body.get('comment') or body.get('status')}")
         content_html = body.get("result", {}).get("content") or ""
         if not content_html:
-            return None
+            raise SourceError("the blog entry has no content")
         # Strip HTML but keep the $$$...$$$ LaTeX (it lives in the text nodes).
-        return BeautifulSoup(content_html, "html.parser").get_text("\n", strip=True) or None
+        text = BeautifulSoup(content_html, "html.parser").get_text("\n", strip=True)
+        if not text:
+            raise SourceError("the blog entry's content was empty after cleaning")
+        return text
 
     # --- internals -----------------------------------------------------------
     def _client(self) -> tuple[httpx.AsyncClient, bool]:

@@ -59,7 +59,9 @@ class ProblemSource(ABC):
 
     @abstractmethod
     async def fetch_editorial(self, editorial_url: str) -> str | None:
-        """Editorial text via the source's permitted API, or None (best-effort)."""
+        """Editorial text via the source's permitted API. Raise `SourceError` (with a
+        user-actionable reason) when a URL was supplied but no editorial could be
+        fetched — callers surface that instead of silently reaching `ready`."""
 
 
 _REGISTRY: dict[str, ProblemSource] = {}

@@ -107,6 +107,59 @@ async def test_reingest_other_url_form_is_idempotent(client, auth_headers, sched
     assert scheduled == [pid]  # not scheduled again
 
 
+async def test_reingest_ready_with_new_editorial_reprocesses(
+    client, auth_headers, scheduled, db_session_maker
+):
+    # A problem that reached `ready` without an editorial must re-run when the editorial
+    # link is supplied on a later re-ingest — not be a silent no-op.
+    created = (
+        await client.post("/problems/ingest", json={"url": PROBLEMSET_URL}, headers=auth_headers)
+    ).json()
+    pid = created["id"]
+    async with db_session_maker() as db:
+        problem = await db.get(Problem, pid)
+        problem.ingestion_status = "ready"  # simulate a completed ingest with no editorial
+        await db.commit()
+    scheduled.clear()
+
+    blog = "https://codeforces.com/blog/entry/155337"
+    r = await client.post(
+        "/problems/ingest",
+        json={"url": PROBLEMSET_URL, "editorial_url": blog},
+        headers=auth_headers,
+    )
+    assert r.status_code == 202
+    assert r.json()["ingestion_status"] == "pending"
+    assert scheduled == [pid]
+
+    async with db_session_maker() as db:
+        problem = await db.scalar(select(Problem).where(Problem.slug == "cf-1846C"))
+        assert problem.editorial_url == blog
+
+
+async def test_reingest_ready_without_new_info_stays_noop(
+    client, auth_headers, scheduled, db_session_maker
+):
+    # A plain duplicate of a `ready` problem (nothing new) must remain a 200 no-op.
+    created = (
+        await client.post(
+            "/problems/ingest",
+            json={"url": PROBLEMSET_URL, "editorial_text": "already have it"},
+            headers=auth_headers,
+        )
+    ).json()
+    pid = created["id"]
+    async with db_session_maker() as db:
+        problem = await db.get(Problem, pid)
+        problem.ingestion_status = "ready"
+        await db.commit()
+    scheduled.clear()
+
+    r = await client.post("/problems/ingest", json={"url": PROBLEMSET_URL}, headers=auth_headers)
+    assert r.status_code == 200
+    assert scheduled == []
+
+
 async def test_unknown_source_returns_400(client, auth_headers, scheduled):
     r = await client.post(
         "/problems/ingest", json={"source": "leetcode", "url": PROBLEMSET_URL}, headers=auth_headers

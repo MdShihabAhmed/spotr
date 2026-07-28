@@ -28,7 +28,7 @@ from app.database import async_session_maker
 from app.ingestion.hint_generator import HintGenerationError, generate_hints
 from app.models import HintLevel, Problem
 from app.problem_flags import detect_interactive, detect_multiple_answers
-from app.sources import ProblemSource, get_source
+from app.sources import ProblemSource, SourceError, get_source
 
 SourceResolver = Callable[[str], ProblemSource]
 LevelGenerator = Callable[[Problem], Awaitable[list[str]]]
@@ -104,14 +104,28 @@ async def _ingest(
             "output) so the problem can be ingested."
         )
 
-    # --- editorial (best-effort, optional) -----------------------------------
+    # --- editorial -----------------------------------------------------------
     # Fetched via the source's permitted API (CF: blogEntry.view). Stored server-side
-    # only, never returned to clients. Not reaching an editorial doesn't fail the ingest.
+    # only, never returned to clients. A problem with NO editorial_url reaches `ready`
+    # without a ladder (fine — the editorial is optional). But if the user *supplied* a
+    # link, a fetch failure is surfaced: the whole point of the link was the ladder, so
+    # failing visibly beats silently reaching `ready` with an unexplained "no editorial".
     if problem.editorial_url and not problem.editorial_text:
         try:
-            problem.editorial_text = await source.fetch_editorial(problem.editorial_url)
-        except Exception:
-            problem.editorial_text = None
+            editorial = await source.fetch_editorial(problem.editorial_url)
+        except SourceError as exc:
+            raise _IngestionFailed(
+                f"Couldn't fetch the editorial from that link: {exc}. Double-check the "
+                "blog URL (e.g. https://codeforces.com/blog/entry/155337), or paste the "
+                "editorial text directly, then re-ingest."
+            ) from exc
+        if not editorial:
+            raise _IngestionFailed(
+                "The editorial link didn't yield any content. Make sure it's a "
+                "Codeforces blog link (…/blog/entry/<id>), or paste the editorial text "
+                "directly, then re-ingest."
+            )
+        problem.editorial_text = editorial
         await db.commit()
 
     # --- graduated ladder ----------------------------------------------------

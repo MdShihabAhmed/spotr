@@ -112,6 +112,10 @@ export function IngestPage() {
   }
 
   const canExtract = images.length > 0;
+  // Normally you extract screenshots first. But re-ingesting an existing problem *just*
+  // to attach the editorial link shouldn't force a re-screenshot — only-provided fields
+  // are applied server-side, so a bare {url, editorial_url} is a valid re-ingest.
+  const canIngest = extracted || editorialUrl.trim().length > 0;
   const err = normalize.error ?? ingest.error;
   const message =
     err instanceof ApiError
@@ -341,9 +345,15 @@ export function IngestPage() {
             </div>
           )}
 
-          <button type="submit" className="btn btn-primary" disabled={ingest.isPending || !extracted}>
+          <button type="submit" className="btn btn-primary" disabled={ingest.isPending || !canIngest}>
             {ingest.isPending ? "Ingesting…" : "Ingest"}
           </button>
+          {!extracted && editorialUrl.trim() && (
+            <p className="hint">
+              Re-ingesting to attach the editorial — the problem's existing statement and
+              samples are kept; only the editorial link is added.
+            </p>
+          )}
         </form>
       </section>
     </div>

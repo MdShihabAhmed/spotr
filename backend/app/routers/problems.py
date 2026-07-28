@@ -19,9 +19,11 @@ from app.sources import get_source
 
 router = APIRouter(prefix="/problems", tags=["problems"])
 
-# Statuses that mean "already ingested or in flight" — a re-ingest is a no-op returning
-# the existing row. Only a previously `failed` problem is re-attempted.
-_IN_FLIGHT_OR_DONE = {"pending", "normalizing", "generating_levels", "ready"}
+# Statuses that mean "still processing" — a re-ingest is a no-op returning the existing
+# row, so we never double-schedule the background task. `ready`/`failed` are terminal and
+# may be re-processed (see `ingest_problem`): `failed` always retries; `ready` retries only
+# when the payload brings an editorial the row doesn't have yet.
+_IN_FLIGHT = {"pending", "normalizing", "generating_levels"}
 
 
 async def _problem_out(db, problem: Problem) -> ProblemOut:
@@ -106,10 +108,23 @@ async def ingest_problem(
         )
     )
     if existing is not None:
-        if existing.ingestion_status in _IN_FLIGHT_OR_DONE:
+        if existing.ingestion_status in _IN_FLIGHT:
+            # Still processing — don't double-schedule; just report the current state.
             response.status_code = 200
             return await _problem_out(db, existing)
-        # Previously failed: retry, this time with whatever content the caller supplies.
+
+        # A re-ingest that brings an editorial the row doesn't have yet is worth
+        # re-running (this is how "add the editorial on a later re-ingest" actually
+        # works). A plain duplicate of a `ready` problem stays a no-op.
+        brings_new_editorial = bool(
+            (payload.editorial_url or payload.editorial_text) and not existing.editorial_text
+        )
+        if existing.ingestion_status == "ready" and not brings_new_editorial:
+            response.status_code = 200
+            return await _problem_out(db, existing)
+
+        # Reprocess: a previously `failed` problem, or a `ready` one with a new editorial.
+        # Apply whatever content the caller supplies (only provided fields are touched).
         _apply_content(existing, payload)
         existing.ingestion_status = "pending"
         existing.ingestion_error = None

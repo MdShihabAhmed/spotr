@@ -22,10 +22,13 @@ async def _fake_levels(problem):
 class _FakeSource:
     """Injectable ProblemSource stand-in. `parse_identity` is unused in pipeline tests."""
 
-    def __init__(self, *, metadata=None, editorial=None, metadata_raises=False):
+    def __init__(
+        self, *, metadata=None, editorial=None, metadata_raises=False, editorial_raises=False
+    ):
         self._metadata = metadata
         self._editorial = editorial
         self._metadata_raises = metadata_raises
+        self._editorial_raises = editorial_raises
         self.editorial_calls: list[str] = []
 
     def parse_identity(self, url):  # pragma: no cover - not exercised here
@@ -38,6 +41,8 @@ class _FakeSource:
 
     async def fetch_editorial(self, editorial_url):
         self.editorial_calls.append(editorial_url)
+        if self._editorial_raises:
+            raise SourceError("blogEntry.view request failed")
         return self._editorial
 
 
@@ -171,6 +176,52 @@ async def test_editorial_fetched_from_url(db_session_maker):
         assert "editorial" in p.editorial_text
 
     assert len(await _levels(db_session_maker, pid)) == 4
+
+
+async def test_editorial_fetch_error_is_surfaced_not_swallowed(db_session_maker):
+    # A supplied editorial_url whose fetch raises must FAIL the ingest with the reason,
+    # not silently reach `ready` with no editorial (the old swallow-to-None behavior).
+    blog = "https://codeforces.com/blog/entry/999999"
+    pid = await _seed_pending(
+        db_session_maker, statement_text="s", sample_tests=SAMPLE, editorial_url=blog
+    )
+    source = _FakeSource(metadata=None, editorial_raises=True)
+
+    await run_ingestion(
+        pid,
+        session_maker=db_session_maker,
+        source_resolver=_resolver(source),
+        level_generator=_fake_levels,
+    )
+
+    async with db_session_maker() as db:
+        p = await db.get(Problem, pid)
+        assert p.ingestion_status == "failed"
+        assert "editorial" in p.ingestion_error.lower()
+        assert p.editorial_text is None
+
+
+async def test_editorial_url_yielding_no_content_marks_failed(db_session_maker):
+    # A link that returns nothing (fetch → None) is a visible failure, not silent `ready`.
+    pid = await _seed_pending(
+        db_session_maker,
+        statement_text="s",
+        sample_tests=SAMPLE,
+        editorial_url="https://codeforces.com/blog/entry/1",
+    )
+    source = _FakeSource(metadata=None, editorial=None)
+
+    await run_ingestion(
+        pid,
+        session_maker=db_session_maker,
+        source_resolver=_resolver(source),
+        level_generator=_fake_levels,
+    )
+
+    async with db_session_maker() as db:
+        p = await db.get(Problem, pid)
+        assert p.ingestion_status == "failed"
+        assert "editorial" in p.ingestion_error.lower()
 
 
 async def test_level_generation_failure_marks_ingestion_failed(db_session_maker):
