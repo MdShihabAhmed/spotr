@@ -164,7 +164,7 @@ async def test_tutor_rejects_unready_and_ladderless_problems(client, auth_header
 
 
 def _fake_stream(captured):
-    async def stream(*, model, messages):
+    async def stream(*, task, messages):
         captured["messages"] = messages
         for token in ("Have ", "you ", "tried a pointer?"):
             yield token
