@@ -21,6 +21,17 @@ class Settings(BaseSettings):
     llm_model_fast: str = "gpt-5-mini"
     embedding_model: str = "text-embedding-3-small"
 
+    # Grounding (RAG over the openly-licensed corpora). The Qdrant collection name embeds
+    # the embedding model: changing the model means a different vector space, so it must be
+    # a different collection (re-seed), never a silent mix. `embedding_dim` must match the
+    # model's output (gemini-embedding-001 → 3072; text-embedding-3-small → 1536).
+    grounding_collection_prefix: str = "grounding"
+    embedding_dim: int = 3072
+    embedding_batch_size: int = 32  # texts per embeddings API call (free-tier friendly)
+    # Where `python -m app.ingestion.grounding` clones/caches the source corpora locally.
+    corpora_dir: str = "./corpora"
+    grounding_top_k: int = 4  # chunks retrieved per tutor turn
+
     # Observability
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
@@ -39,6 +50,13 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def grounding_collection(self) -> str:
+        """Qdrant collection name, scoped to the embedding model so a model change can't
+        silently query vectors from an incompatible space."""
+        safe_model = self.embedding_model.replace("/", "_")
+        return f"{self.grounding_collection_prefix}__{safe_model}"
 
     @property
     def sqlalchemy_database_url(self) -> str:

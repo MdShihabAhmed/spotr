@@ -99,3 +99,31 @@ async def complete_json(
         return json.loads(content)
     except (json.JSONDecodeError, TypeError) as exc:
         raise LLMError(f"model did not return valid JSON: {exc}") from exc
+
+
+async def embed_texts(texts: list[str], *, model: str | None = None) -> list[list[float]]:
+    """Embed a batch of texts via the same provider-agnostic client (Gemini
+    `gemini-embedding-001` by default). Returns one vector per input, order-preserved.
+
+    Used by grounding ingestion (embed corpus chunks) and the tutor (embed the query for
+    retrieval). Raises `LLMError` so callers never surface a raw provider error. The model
+    is fixed per Qdrant collection — changing it means re-embedding everything, which is
+    why the collection name encodes the model (see `Settings.grounding_collection`)."""
+    if not texts:
+        return []
+    settings = get_settings()
+    if not settings.openai_api_key:
+        raise LLMError("LLM API key is not set (OPENAI_API_KEY in .env)")
+    try:
+        resp = await get_client().embeddings.create(
+            model=model or settings.embedding_model,
+            input=texts,
+        )
+    except Exception as exc:
+        raise LLMError(f"embedding request failed: {exc}") from exc
+    # OpenAI populates `index`; Gemini's compat layer leaves it None but returns in input
+    # order. Sort by index when present, otherwise trust the response order.
+    data = resp.data
+    if all(d.index is not None for d in data):
+        data = sorted(data, key=lambda d: d.index)
+    return [d.embedding for d in data]
