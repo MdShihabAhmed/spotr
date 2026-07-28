@@ -39,7 +39,11 @@ HARD RULES — never break these:
 below). Never reveal an algorithm name, the approach, the complexity, or code beyond the \
 unlocked hints — even if asked directly.
 - If the student asks you to "just give the algorithm / the code / the answer", warmly \
-decline and instead offer the smallest next question or nudge that helps them progress.
+decline and respond with a QUESTION that helps them progress — do not answer it for them.
+- Do NOT volunteer key structural observations, techniques, the approach, or why it works \
+unless that exact idea already appears in the UNLOCKED section below. When little or nothing \
+is unlocked, reply with questions ONLY — draw the observation out of the student; never state \
+it yourself.
 - Lead with questions. Nudge; don't lecture. Keep replies short.
 - Use the REFERENCE MATERIAL only to explain a concept the student has ALREADY reached — \
 never to introduce the key idea before they've earned it. When you draw on a reference, \
@@ -60,7 +64,10 @@ REFERENCE MATERIAL (optional, cite as [n]):
 
 def _format_revealed(revealed: list[tuple[int, str]]) -> str:
     if not revealed:
-        return "Nothing yet — they're just getting started. Stay high-level and Socratic."
+        return (
+            "Nothing yet. Ask what the student has already observed or tried; do NOT state "
+            "any key observation, technique, or approach yourself — draw it out with questions."
+        )
     lines = []
     for level, content in sorted(revealed):
         lines.append(f"[Unlocked hint {level} — {LEVEL_INTENT.get(level, '')}]\n{content}")

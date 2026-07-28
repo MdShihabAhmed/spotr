@@ -78,7 +78,7 @@ def test_thread_with_nothing_revealed_stays_high_level():
     )
     blob = json.dumps(thread)
     assert "SENTINEL" not in blob
-    assert "just getting started" in thread[0]["content"]
+    assert "draw it out with questions" in thread[0]["content"]
 
 
 # --- disclosure judge --------------------------------------------------------

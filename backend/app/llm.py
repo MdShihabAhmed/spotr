@@ -15,11 +15,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
-from collections.abc import AsyncIterator
+import re
+from collections.abc import AsyncIterator, Awaitable, Callable
 from functools import lru_cache
-from typing import Any
+from typing import Any, TypeVar
 
+import openai
 from openai import AsyncOpenAI
 
 from app.config import get_settings
@@ -27,6 +30,34 @@ from app.config import get_settings
 
 class LLMError(Exception):
     """LLM call failed or returned unusable output."""
+
+
+_T = TypeVar("_T")
+_MAX_RETRIES = 4  # free-tier providers (Gemini: 5 req/min/model) 429 readily; back off + retry
+
+
+def _retry_after_seconds(exc: openai.RateLimitError, attempt: int) -> float:
+    """Honor the provider's suggested retry delay (Gemini returns `retryDelay: '58s'` in
+    the 429 body); otherwise exponential backoff. Capped so we never hang too long."""
+    match = re.search(r"retryDelay['\"]?:\s*['\"]?(\d+)", str(exc))
+    if match:
+        return min(float(match.group(1)) + 1.0, 65.0)
+    return min(2.0 * (attempt + 1) ** 2, 65.0)
+
+
+async def _create_with_retry(make_call: Callable[[], Awaitable[_T]]) -> _T:
+    """Run an LLM create-call, retrying on 429 with backoff. Safe for streaming too: the
+    429 is raised before any token is yielded, so re-issuing the call loses nothing."""
+    last: openai.RateLimitError | None = None
+    for attempt in range(_MAX_RETRIES):
+        try:
+            return await make_call()
+        except openai.RateLimitError as exc:
+            last = exc
+            if attempt == _MAX_RETRIES - 1:
+                break
+            await asyncio.sleep(_retry_after_seconds(exc, attempt))
+    raise LLMError(f"rate-limited after {_MAX_RETRIES} attempts: {last}")
 
 
 @lru_cache
@@ -81,17 +112,21 @@ async def complete_json(
         user_content = user
 
     try:
-        resp = await get_client().chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user_content},
-            ],
-            response_format={
-                "type": "json_schema",
-                "json_schema": {"name": schema_name, "schema": schema, "strict": True},
-            },
+        resp = await _create_with_retry(
+            lambda: get_client().chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user_content},
+                ],
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {"name": schema_name, "schema": schema, "strict": True},
+                },
+            )
         )
+    except LLMError:
+        raise
     except Exception as exc:  # openai errors, network, etc.
         raise LLMError(f"LLM request failed: {exc}") from exc
 
@@ -112,8 +147,10 @@ async def stream_completion(
     if not settings.openai_api_key:
         raise LLMError("LLM API key is not set (OPENAI_API_KEY in .env)")
     try:
-        stream = await get_client().chat.completions.create(
-            model=model, messages=messages, stream=True
+        stream = await _create_with_retry(
+            lambda: get_client().chat.completions.create(
+                model=model, messages=messages, stream=True
+            )
         )
         async for chunk in stream:
             if not chunk.choices:
@@ -141,10 +178,14 @@ async def embed_texts(texts: list[str], *, model: str | None = None) -> list[lis
     if not settings.openai_api_key:
         raise LLMError("LLM API key is not set (OPENAI_API_KEY in .env)")
     try:
-        resp = await get_client().embeddings.create(
-            model=model or settings.embedding_model,
-            input=texts,
+        resp = await _create_with_retry(
+            lambda: get_client().embeddings.create(
+                model=model or settings.embedding_model,
+                input=texts,
+            )
         )
+    except LLMError:
+        raise
     except Exception as exc:
         raise LLMError(f"embedding request failed: {exc}") from exc
     # OpenAI populates `index`; Gemini's compat layer leaves it None but returns in input
