@@ -28,6 +28,7 @@ from app.database import async_session_maker
 from app.ingestion.hint_generator import HintGenerationError, generate_hints
 from app.models import HintLevel, Problem
 from app.problem_flags import detect_interactive, detect_multiple_answers
+from app.queue import notify_problem_status
 from app.sources import ProblemSource, SourceError, get_source
 
 SourceResolver = Callable[[str], ProblemSource]
@@ -53,10 +54,12 @@ async def run_ingestion(
             problem.ingestion_status = "failed"
             problem.ingestion_error = str(exc)
             await db.commit()
+            await notify_problem_status(problem.id)
         except Exception as exc:  # never let a background task die silently
             problem.ingestion_status = "failed"
             problem.ingestion_error = f"unexpected ingestion error: {exc}"
             await db.commit()
+            await notify_problem_status(problem.id)
 
 
 class _IngestionFailed(Exception):
@@ -69,9 +72,12 @@ async def _ingest(
     source_resolver: SourceResolver,
     level_generator: LevelGenerator,
 ) -> None:
-    problem.ingestion_status = "pending"
+    # Claimed by a worker as `normalizing` already; set it here too so a direct call (tests)
+    # and the SSE progress stream both see the in-flight state.
+    problem.ingestion_status = "normalizing"
     problem.ingestion_error = None
     await db.commit()
+    await notify_problem_status(problem.id)
 
     try:
         source = source_resolver(problem.source)
@@ -135,6 +141,7 @@ async def _ingest(
     if problem.editorial_text:
         problem.ingestion_status = "generating_levels"
         await db.commit()
+        await notify_problem_status(problem.id)
         try:
             levels = await level_generator(problem)
         except HintGenerationError as exc:
@@ -149,3 +156,4 @@ async def _ingest(
     problem.ingestion_status = "ready"
     problem.ingestion_error = None
     await db.commit()
+    await notify_problem_status(problem.id)

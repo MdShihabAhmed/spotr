@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -9,11 +11,25 @@ from app.config import get_settings
 from app.database import engine
 from app.errors import ApiError
 from app.routers import auth, problems, tutor
+from app.worker import run_worker
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # In dev, run the ingestion worker inside the API process so `uvicorn` alone processes
+    # the queue. The compose stack sets RUN_INLINE_WORKER=false and runs a dedicated worker.
+    worker_task: asyncio.Task | None = None
+    stop_event = asyncio.Event()
+    if get_settings().run_inline_worker:
+        worker_task = asyncio.create_task(run_worker(stop_event=stop_event))
+
     yield
+
+    if worker_task is not None:
+        stop_event.set()
+        worker_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await worker_task
     await close_redis()
     await engine.dispose()
 

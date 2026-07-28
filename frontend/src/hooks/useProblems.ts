@@ -1,8 +1,10 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getProblem,
   ingestProblem,
   normalizeProblem,
+  streamProblemStatus,
   type IngestRequest,
   type Problem,
 } from "../lib/api";
@@ -22,18 +24,42 @@ export function useNormalize() {
 }
 
 /**
- * Fetch one problem by slug, polling every 1.5s while ingestion is still running and
- * stopping the moment it reaches a terminal status — the client half of the backend's
- * 202-accept-then-poll pattern.
+ * Fetch one problem by slug and keep it live while ingestion runs. Updates are pushed over
+ * SSE (the backend LISTENs on Postgres and streams each status change) — no polling. If the
+ * stream can't be opened (proxy buffering, transient failure), we fall back to a slow poll so
+ * status still converges.
  */
 export function useProblem(slug: string | null) {
-  return useQuery({
+  const queryClient = useQueryClient();
+  const [streamFailed, setStreamFailed] = useState(false);
+
+  const query = useQuery({
     queryKey: ["problem", slug],
     queryFn: () => getProblem(slug as string),
     enabled: slug != null,
-    refetchInterval: (query) => {
-      const status = query.state.data?.ingestion_status;
-      return status && !TERMINAL.has(status) ? 1500 : false;
+    // Polling is the fallback only; while SSE works this stays off.
+    refetchInterval: (q) => {
+      if (!streamFailed) return false;
+      const status = q.state.data?.ingestion_status;
+      return status && !TERMINAL.has(status) ? 2000 : false;
     },
   });
+
+  useEffect(() => {
+    if (slug == null || streamFailed) return;
+    const controller = new AbortController();
+    // The server emits current status immediately and closes on a terminal one, so opening
+    // unconditionally is safe. Each frame just refetches the full problem row.
+    void streamProblemStatus(
+      slug,
+      {
+        onStatus: () => queryClient.invalidateQueries({ queryKey: ["problem", slug] }),
+        onError: () => setStreamFailed(true),
+      },
+      controller.signal,
+    );
+    return () => controller.abort();
+  }, [slug, streamFailed, queryClient]);
+
+  return query;
 }

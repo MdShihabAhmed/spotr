@@ -24,10 +24,11 @@ your own LLM key, and your data stays yours.
 8. [Tech stack](#8-tech-stack)
 9. [Licensing & attribution](#9-licensing--attribution)
 
-> **Status.** Core is built and tested (auth, problem ingestion, graduated hint ladder,
-> grounding retrieval, the streaming tutor with revealed-set disclosure, and the leakage
-> eval). Full one-command `docker compose` packaging and the grounding corpus *seed* are the
-> last pieces in progress; today the app runs in dev mode (see [Quickstart](#3-quickstart)).
+> **Status.** Core is built and tested (auth, problem ingestion on a durable Postgres-backed
+> job queue, graduated hint ladder, grounding retrieval, the streaming tutor with
+> revealed-set disclosure, and the leakage eval). The full stack runs with one
+> `docker compose up`. The grounding corpus *seed* is an opt-in one-shot you run once (it
+> needs an embeddings key and some time).
 
 ---
 
@@ -56,10 +57,13 @@ credible and traceable, not hallucinated.
 
 ```
   Browser (React SPA)
-        │  screenshots / chat (SSE)
+        │  screenshots / chat (SSE) / live ingest status (SSE)
         ▼
-  FastAPI  ──►  Problem ingestion ──►  Postgres (problems, ladder, sessions, messages)
-        │         normalize (vision) → metadata + editorial → generate 4-rung ladder
+  FastAPI  ──►  POST /ingest  ──►  Postgres (the `problems` row IS the job queue)
+        │                                │  ▲ LISTEN/NOTIFY (status → SSE)
+        │                                ▼  │
+        │                          Worker (claims pending rows, FOR UPDATE SKIP LOCKED)
+        │                            normalize (vision) → metadata + editorial → 4-rung ladder
         │
         ├──►  Tutor turn:  build context from {unlocked rungs} ∪ {your messages}
         │                  + retrieved grounding  →  streamed, cited reply
@@ -80,30 +84,50 @@ credible and traceable, not hallucinated.
 
 ## 3. Quickstart
 
-**Prerequisites:** Docker (for Postgres/Redis/Qdrant), Python ≥ 3.14 with
-[`uv`](https://docs.astral.sh/uv/), Node ≥ 20, and a free
-[Gemini API key](https://aistudio.google.com/apikey) (no credit card).
+### Option A — the whole stack in one command (self-host)
+
+**Prerequisites:** Docker, and a free [Gemini API key](https://aistudio.google.com/apikey)
+(no credit card).
 
 ```bash
-# 1. Infra
-docker compose up -d          # postgres + redis + qdrant
+cp backend/.env.example backend/.env   # paste your key into OPENAI_API_KEY
+docker compose up -d --build           # postgres + redis + qdrant + migrate + api + worker + frontend
+```
+
+- Frontend → **http://localhost:8080**, API → **http://localhost:8000**.
+- Migrations run automatically (the one-shot `migrate` service); the API and a dedicated
+  `worker` container come up after it.
+- Seed the grounding corpora once (opt-in, needs the embeddings key, takes a while):
+  ```bash
+  docker compose --profile seed run --rm seed
+  ```
+
+### Option B — dev mode (hot reload)
+
+**Prerequisites:** Docker (infra only), Python ≥ 3.14 with
+[`uv`](https://docs.astral.sh/uv/), Node ≥ 20, the Gemini key.
+
+```bash
+# 1. Infra only
+docker compose up -d postgres redis qdrant
 
 # 2. Backend (from backend/)
 cp .env.example .env          # then paste your key into OPENAI_API_KEY
 uv sync
 uv run alembic upgrade head
-uv run uvicorn app.main:app --reload    # http://localhost:8000
+uv run uvicorn app.main:app --reload    # http://localhost:8000 (runs the worker inline)
 
 # 3. Frontend (from frontend/)
 npm install
 npm run dev                   # http://localhost:5173
 ```
 
+In dev, the ingestion worker runs **inside** the API process (`RUN_INLINE_WORKER=true`), so
+`uvicorn` alone processes the queue — no separate worker to start. On Windows, `.\dev.ps1`
+launches all three panes at once.
+
 Register an account, ingest a problem (paste its URL + an editorial-blog link, drop a
 screenshot of the statement), then open the tutor.
-
-> On Windows, `.\dev.ps1` launches all three panes at once. Full-stack `docker compose up`
-> (backend + frontend in the same command) and the grounding `seed` step are being finalized.
 
 ---
 
@@ -221,6 +245,13 @@ level-1 nudge too eagerly, which drove a prompt fix.
   quantifies it.
 - **Agent state lives in Postgres**, reconstructed per request — not a LangGraph
   checkpointer. Simpler, and it survives restarts.
+- **Durable ingestion queue without a broker.** Ingestion is 30–90s of API + LLM work, so it
+  runs in a worker, not the request. Instead of Celery + Redis-as-broker, *the `problems` row
+  is the queue*: a worker claims `pending` rows with `SELECT … FOR UPDATE SKIP LOCKED`, and a
+  job whose worker crashed mid-run is re-queued after a timeout. Nothing is lost to a restart —
+  the durability a broker gives, with one fewer moving part. Live status reaches the browser
+  over SSE fed by Postgres `LISTEN/NOTIFY` (no polling). The worker runs inline in dev and as
+  its own container in the compose stack (scale it freely — SKIP LOCKED keeps claims disjoint).
 - **Ladder in Postgres, grounding in Qdrant.** Retrieval earns its place for *grounding with
   citations*, not for the ≤4 short hints (those are gated by a level filter, not similarity).
 - **No problem scraping.** User-provided input + permitted APIs only.

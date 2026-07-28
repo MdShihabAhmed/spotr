@@ -1,3 +1,6 @@
+import contextlib
+import json
+
 import pytest
 
 from sqlalchemy import select
@@ -10,14 +13,15 @@ CONTEST_URL = "https://codeforces.com/contest/1846/problem/C"
 
 @pytest.fixture
 def scheduled(monkeypatch):
-    """Replace background ingestion with a no-op recording scheduled ids, so router
-    tests never touch the network or the real session maker."""
+    """Record the ids the router enqueues for the worker. Patching the NOTIFY seam keeps
+    router tests off Postgres (sqlite has no `pg_notify`) while still asserting *what* got
+    queued — a job is enqueued by committing `pending` + firing this wake-up."""
     calls: list[int] = []
 
-    async def fake_run_ingestion(problem_id: int):
+    async def fake_notify(problem_id: int):
         calls.append(problem_id)
 
-    monkeypatch.setattr("app.routers.problems.run_ingestion", fake_run_ingestion)
+    monkeypatch.setattr("app.routers.problems.notify_job_enqueued", fake_notify)
     return calls
 
 
@@ -184,6 +188,78 @@ async def test_get_unknown_returns_404(client, auth_headers):
     r = await client.get("/problems/cf-9999Z", headers=auth_headers)
     assert r.status_code == 404
     assert r.json()["code"] == "problem_not_found"
+
+
+def _parse_sse(text: str) -> list[dict]:
+    return [
+        json.loads(line[len("data:") :].strip())
+        for line in text.splitlines()
+        if line.startswith("data:")
+    ]
+
+
+@contextlib.asynccontextmanager
+async def _fake_listen(channel):
+    yield None  # no real Postgres LISTEN in tests
+
+
+async def _seed_problem(db_session_maker, *, slug, status, error=None) -> int:
+    async with db_session_maker() as db:
+        p = Problem(
+            slug=slug, source="codeforces", external_id=slug.upper(),
+            ingestion_status=status, ingestion_error=error,
+        )
+        db.add(p)
+        await db.commit()
+        await db.refresh(p)
+        return p.id
+
+
+async def test_events_requires_auth(client, db_session_maker):
+    await _seed_problem(db_session_maker, slug="cf-1z", status="ready")
+    assert (await client.get("/problems/cf-1z/events")).status_code == 401
+
+
+async def test_events_unknown_problem_404(client, auth_headers):
+    r = await client.get("/problems/cf-nope/events", headers=auth_headers)
+    assert r.status_code == 404
+
+
+async def test_events_terminal_status_emits_once_and_closes(
+    client, auth_headers, db_session_maker, monkeypatch
+):
+    await _seed_problem(db_session_maker, slug="cf-rdy", status="ready")
+    monkeypatch.setattr("app.routers.problems.pg_listen", _fake_listen)
+    monkeypatch.setattr("app.routers.problems.async_session_maker", db_session_maker)
+
+    r = await client.get("/problems/cf-rdy/events", headers=auth_headers)
+    assert r.status_code == 200
+    events = _parse_sse(r.text)
+    assert events == [{"type": "status", "status": "ready", "error": None}]
+
+
+async def test_events_streams_transition_then_closes(
+    client, auth_headers, db_session_maker, monkeypatch
+):
+    pid = await _seed_problem(db_session_maker, slug="cf-run", status="pending")
+    monkeypatch.setattr("app.routers.problems.pg_listen", _fake_listen)
+    monkeypatch.setattr("app.routers.problems.async_session_maker", db_session_maker)
+
+    async def flip_then_notify(conn, *, timeout):
+        # Simulate the worker finishing: flip the row, then deliver its NOTIFY payload.
+        async with db_session_maker() as db:
+            p = await db.get(Problem, pid)
+            if p.ingestion_status == "pending":
+                p.ingestion_status = "ready"
+                await db.commit()
+        return [str(pid)]
+
+    monkeypatch.setattr("app.routers.problems.wait_for_notification", flip_then_notify)
+
+    r = await client.get("/problems/cf-run/events", headers=auth_headers)
+    events = _parse_sse(r.text)
+    assert events[0] == {"type": "status", "status": "pending", "error": None}
+    assert events[-1] == {"type": "status", "status": "ready", "error": None}
 
 
 async def test_reingest_failed_retries_and_updates_editorial(

@@ -69,6 +69,14 @@ class Settings(BaseSettings):
     corpora_dir: str = "./corpora"
     grounding_top_k: int = 4  # chunks retrieved per tutor turn
 
+    # Ingestion worker (durable Postgres-backed job queue — see app/queue.py).
+    # `run_inline_worker` starts the worker inside the API process (dev: one command runs
+    # everything). The compose stack sets it false and runs a dedicated `worker` container.
+    run_inline_worker: bool = True
+    worker_poll_interval_seconds: float = 2.0  # NOTIFY fallback + stuck-recovery cadence
+    worker_stuck_timeout_seconds: int = 600  # re-queue a job whose worker died mid-run
+    worker_max_attempts: int = 3  # after this many claims, a stuck job is failed, not retried
+
     # Observability
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""

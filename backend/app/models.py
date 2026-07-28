@@ -76,8 +76,17 @@ class Problem(Base):
     is_interactive: Mapped[bool] = mapped_column(Boolean, default=False)
     has_multiple_answers: Mapped[bool] = mapped_column(Boolean, default=False)
     # "pending" | "normalizing" | "generating_levels" | "ready" | "failed"
-    ingestion_status: Mapped[str] = mapped_column(String(32), default="pending")
+    # The row IS the durable job queue: `pending` = waiting to be claimed, the two middle
+    # states = claimed/in-flight, `ready`/`failed` = terminal. A worker claims pending rows
+    # with SELECT … FOR UPDATE SKIP LOCKED, so the queue survives restarts/crashes.
+    ingestion_status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
     ingestion_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # When a worker claimed this job. Used for crash recovery: a row stuck in an in-flight
+    # state past a timeout (worker died mid-job) is re-queued. NULL when not claimed.
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Claim count — caps retries so a job that crashes the worker every time eventually
+    # lands in `failed` instead of re-queuing forever.
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     levels: Mapped[list["HintLevel"]] = relationship(back_populates="problem")

@@ -1,23 +1,44 @@
 """Problem ingestion endpoints.
 
-`POST /problems/ingest` follows the 202-accept-then-poll pattern: it creates the
-`Problem` row (identity parsed from the URL by the chosen source), schedules background
-ingestion, and returns immediately with the problem's **slug**. The client polls
-`GET /problems/{slug}` for `ingestion_status`.
+`POST /problems/ingest` enqueues a durable job: it creates the `Problem` row (identity parsed
+from the URL by the chosen source), sets it `pending`, and returns immediately with the
+problem's **slug**. A separate worker (see `app/worker.py`) claims and processes it — the row
+in Postgres *is* the queue, so the work survives an API restart or crash.
+
+Progress reaches the client two ways: `GET /problems/{slug}` for a one-shot status read, and
+`GET /problems/{slug}/events` for a live SSE stream fed by Postgres `LISTEN/NOTIFY` (no
+polling).
 """
 
-from fastapi import APIRouter, BackgroundTasks, Response
+from __future__ import annotations
+
+import asyncio
+import json
+from collections.abc import AsyncIterator
+
+from fastapi import APIRouter, Request, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 
 from app.dependencies import CurrentUser, DbSession
 from app.errors import ApiError
-from app.ingestion.pipeline import run_ingestion
 from app.models import HintLevel, Problem
 from app.normalize import NormalizeError, normalize
+from app.queue import (
+    STATUS_CHANNEL,
+    enqueue_ingestion,
+    notify_job_enqueued,
+    pg_listen,
+    wait_for_notification,
+)
+from app.database import async_session_maker
 from app.schemas import NormalizedOut, NormalizeRequest, ProblemIngest, ProblemOut
 from app.sources import get_source
 
 router = APIRouter(prefix="/problems", tags=["problems"])
+
+# Ingestion is finished (for good or ill) at these; anything else is still in flight.
+_TERMINAL_STATUSES = {"ready", "failed"}
 
 # Statuses that mean "still processing" — a re-ingest is a no-op returning the existing
 # row, so we never double-schedule the background task. `ready`/`failed` are terminal and
@@ -85,11 +106,10 @@ async def ingest_problem(
     payload: ProblemIngest,
     user: CurrentUser,
     db: DbSession,
-    background_tasks: BackgroundTasks,
     response: Response,
 ):
     """Submit a problem URL (+ provided statement/samples + optional editorial link).
-    Returns 202 for a new ingestion, 200 when the problem already exists (idempotent)."""
+    Returns 202 for a new/queued ingestion, 200 when the problem already exists (idempotent)."""
     try:
         source = get_source(payload.source)
     except ValueError as exc:
@@ -109,7 +129,7 @@ async def ingest_problem(
     )
     if existing is not None:
         if existing.ingestion_status in _IN_FLIGHT:
-            # Still processing — don't double-schedule; just report the current state.
+            # Still queued/processing — don't re-enqueue; just report the current state.
             response.status_code = 200
             return await _problem_out(db, existing)
 
@@ -126,10 +146,8 @@ async def ingest_problem(
         # Reprocess: a previously `failed` problem, or a `ready` one with a new editorial.
         # Apply whatever content the caller supplies (only provided fields are touched).
         _apply_content(existing, payload)
-        existing.ingestion_status = "pending"
-        existing.ingestion_error = None
-        await db.commit()
-        background_tasks.add_task(run_ingestion, existing.id)
+        await enqueue_ingestion(db, existing)
+        await notify_job_enqueued(existing.id)
         response.status_code = 202
         return await _problem_out(db, existing)
 
@@ -146,9 +164,8 @@ async def ingest_problem(
     await db.commit()
     await db.refresh(problem)
 
-    # Scheduled after the response commit — the background task opens its own session and
-    # must be able to read the row we just committed.
-    background_tasks.add_task(run_ingestion, problem.id)
+    # The row is now `pending` in the queue; nudge an idle worker to claim it immediately.
+    await notify_job_enqueued(problem.id)
     response.status_code = 202
     return await _problem_out(db, problem)
 
@@ -159,3 +176,56 @@ async def get_problem(slug: str, user: CurrentUser, db: DbSession):
     if problem is None:
         raise ApiError(404, "problem_not_found", "No problem with that slug")
     return await _problem_out(db, problem)
+
+
+def _sse(data: dict) -> str:
+    return f"data: {json.dumps(data)}\n\n"
+
+
+@router.get("/{slug}/events")
+async def problem_events(slug: str, user: CurrentUser, db: DbSession, request: Request):
+    """Live ingestion status as Server-Sent Events — the push replacement for polling.
+
+    Emits the current `{status, error}` immediately, then one frame per status change, and
+    closes once the status is terminal (`ready`/`failed`). Changes are delivered by Postgres
+    `LISTEN problem_status`; a short poll timeout is a safety net for a missed NOTIFY."""
+    problem = await db.scalar(select(Problem).where(Problem.slug == slug))
+    if problem is None:
+        raise ApiError(404, "problem_not_found", "No problem with that slug")
+
+    return StreamingResponse(
+        _status_stream(problem.id, slug),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+async def _read_status(problem_id: int) -> tuple[str, str | None]:
+    async with async_session_maker() as db:
+        row = await db.get(Problem, problem_id)
+        if row is None:
+            return "failed", "problem disappeared"
+        return row.ingestion_status, row.ingestion_error
+
+
+async def _status_stream(problem_id: int, slug: str) -> AsyncIterator[str]:
+    """LISTEN for this problem's status changes and emit them. We LISTEN *before* the first
+    read so no change can slip through the gap between reading and subscribing."""
+    async with pg_listen(STATUS_CHANNEL) as conn:
+        status, error = await _read_status(problem_id)
+        yield _sse({"type": "status", "status": status, "error": error})
+        if status in _TERMINAL_STATUSES:
+            return
+
+        while True:
+            payloads = await wait_for_notification(conn, timeout=15.0)
+            # Re-read on any notification for this problem (or on the timeout, as a fallback).
+            if payloads and str(problem_id) not in payloads:
+                continue
+            new_status, new_error = await _read_status(problem_id)
+            if new_status != status or new_error != error:
+                status, error = new_status, new_error
+                yield _sse({"type": "status", "status": status, "error": error})
+            if status in _TERMINAL_STATUSES:
+                return
+            await asyncio.sleep(0)  # cooperative yield

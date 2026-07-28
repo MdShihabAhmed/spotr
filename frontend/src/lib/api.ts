@@ -161,6 +161,54 @@ export const ingestProblem = (body: IngestRequest) =>
 
 export const getProblem = (slug: string) => api.get<Problem>(`/problems/${slug}`);
 
+export type ProblemStatusHandlers = {
+  onStatus: (status: IngestionStatus, error: string | null) => void;
+  onError: (detail: string) => void;
+};
+
+/** Subscribe to live ingestion-status changes via SSE (server LISTENs on Postgres and pushes
+ *  each transition), replacing status polling. The server closes the stream on a terminal
+ *  status; pass an AbortSignal to close early (component unmount). */
+export async function streamProblemStatus(
+  slug: string,
+  h: ProblemStatusHandlers,
+  signal?: AbortSignal,
+): Promise<void> {
+  let resp: Response;
+  try {
+    resp = await authorizedFetch(`/problems/${slug}/events`, { signal });
+  } catch (e) {
+    if ((e as Error).name === "AbortError") return; // intentional close, not a failure
+    h.onError("Lost the status connection.");
+    return;
+  }
+  if (!resp.ok || !resp.body) {
+    h.onError("Couldn't open the status stream.");
+    return;
+  }
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const frames = buffer.split("\n\n");
+      buffer = frames.pop() ?? "";
+      for (const frame of frames) {
+        const line = frame.split("\n").find((l) => l.startsWith("data:"));
+        if (!line) continue;
+        const evt = JSON.parse(line.slice(5).trim());
+        if (evt.type === "status") h.onStatus(evt.status, evt.error ?? null);
+      }
+    }
+  } catch (e) {
+    if ((e as Error).name === "AbortError") return;
+    h.onError("The status stream dropped.");
+  }
+}
+
 /** Cleaned, structured problem returned by /problems/normalize. */
 export type NormalizedProblem = {
   statement: string;

@@ -9,6 +9,17 @@ from app.database import Base, get_db
 from app.main import app
 
 
+@pytest.fixture(autouse=True)
+def _no_pg_notify(monkeypatch):
+    """NOTIFY runs on the production Postgres engine; tests use sqlite. No-op the low-level
+    emit so any enqueue/status notification is inert (and never dials localhost:5432)."""
+
+    async def noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr("app.queue._emit", noop)
+
+
 @pytest.fixture
 async def db_session_maker():
     engine = create_async_engine(

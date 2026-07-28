@@ -2,6 +2,20 @@
 # directory is renamed — Compose otherwise derives the project name from it.
 name: forcesai
 
+# Full self-host stack: `docker compose up -d` builds and runs everything
+# (postgres + redis + qdrant + migrate + api + worker + frontend). BYOK: put your key in
+# backend/.env (OPENAI_API_KEY). The grounding corpus seed is a one-shot, opt-in step:
+#   docker compose --profile seed run --rm seed
+#
+# Roles share one backend image; the compose `command` picks the role. DATABASE_URL/REDIS_URL/
+# QDRANT_URL are overridden here to the in-network service hostnames (backend/.env keeps the
+# localhost values for `uv run` dev).
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql://forcesai_user:password@postgres:5432/forcesai
+  REDIS_URL: redis://redis:6379/0
+  QDRANT_URL: http://qdrant:6333
+
 services:
   postgres:
     image: postgres:16
@@ -34,10 +48,98 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
 
+  # One-shot: apply Alembic migrations, then exit. api/worker wait for it to finish, so the
+  # schema is ready before either serves — and only one process ever runs migrations.
+  migrate:
+    build: ./backend
+    env_file: ./backend/.env
+    environment:
+      <<: *backend-env
+    command: ["uv", "run", "alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      <<: *backend-env
+      # A dedicated worker container processes the queue, so the API doesn't run it inline.
+      RUN_INLINE_WORKER: "false"
+      # The browser loads the SPA from :8080 and calls the API cross-origin.
+      CORS_ORIGINS: "http://localhost:8080,http://localhost:5173"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+      qdrant:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # The durable ingestion queue's worker. Scale with `--scale worker=N`: FOR UPDATE SKIP
+  # LOCKED means no two workers ever claim the same job.
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      <<: *backend-env
+    command: ["uv", "run", "python", "-m", "app.worker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Baked into the bundle at build time; must be reachable from the browser.
+        VITE_API_URL: http://localhost:8000
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+
+  # Opt-in grounding seed: clone the openly-licensed corpora, chunk, embed, upsert to Qdrant.
+  # Not part of `up` (it needs an embeddings key and is a long one-shot). Run explicitly:
+  #   docker compose --profile seed run --rm seed
+  seed:
+    build: ./backend
+    profiles: ["seed"]
+    env_file: ./backend/.env
+    environment:
+      <<: *backend-env
+    command: ["uv", "run", "python", "-m", "app.ingestion.grounding"]
+    volumes:
+      - corpora:/app/corpora
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      qdrant:
+        condition: service_started
+
 # Judge0 is NOT included here: it requires privileged containers and ships its own
-# docker-compose (https://github.com/judge0/judge0). Run it separately, or use a
-# hosted instance and set JUDGE0_URL/JUDGE0_API_KEY accordingly.
+# docker-compose (https://github.com/judge0/judge0). Run it separately if/when the deferred
+# stress-testing feature lands.
 
 volumes:
   pgdata:
   qdrant_data:
+  corpora:
