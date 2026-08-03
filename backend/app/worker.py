@@ -101,9 +101,9 @@ def main() -> None:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
-    # psycopg's async driver needs a selector event loop; Windows defaults to Proactor (see
-    # CLAUDE.md). uvicorn --reload handles this for the inline worker; the standalone process
-    # must set it itself.
+    # psycopg's async driver needs a selector event loop; Windows defaults to Proactor, which
+    # it cannot use. uvicorn --reload handles this for the inline worker; the standalone
+    # process must set it itself.
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
