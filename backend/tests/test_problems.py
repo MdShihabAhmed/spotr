@@ -291,3 +291,23 @@ async def test_reingest_failed_retries_and_updates_editorial(
         problem = await db.scalar(select(Problem).where(Problem.slug == "cf-1846C"))
         assert problem.editorial_text == "now pasted"
         assert problem.ingestion_error is None
+
+
+async def test_list_requires_auth(client):
+    assert (await client.get("/problems")).status_code == 401
+
+
+async def test_list_newest_first_and_paginates(client, auth_headers, db_session_maker):
+    for slug in ("cf-l1", "cf-l2", "cf-l3"):
+        await _seed_problem(db_session_maker, slug=slug, status="ready")
+
+    r = await client.get("/problems?page=1&page_size=2", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 3
+    assert body["page"] == 1 and body["page_size"] == 2
+    # Newest first (created_at desc, id desc as tiebreak): cf-l3 leads.
+    assert [i["slug"] for i in body["items"]] == ["cf-l3", "cf-l2"]
+
+    r2 = await client.get("/problems?page=2&page_size=2", headers=auth_headers)
+    assert [i["slug"] for i in r2.json()["items"]] == ["cf-l1"]

@@ -1281,6 +1281,84 @@ p {
   letter-spacing: -0.03em;
 }
 
+/* --- Problems list --- */
+.list-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.prob-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--b-hair);
+}
+.prob-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 4px;
+  border-bottom: 1px solid var(--b-hair);
+  text-decoration: none;
+  color: var(--ink);
+}
+.prob-row:hover {
+  background: oklch(0.975 0.004 250);
+}
+.prob-title {
+  font-family: var(--ui);
+  font-size: 15.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.prob-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: oklch(0.5 0.015 258);
+}
+.prob-source {
+  text-transform: lowercase;
+}
+.prob-rating::before {
+  content: "·";
+  margin-right: 12px;
+  color: oklch(0.78 0.012 250);
+}
+.prob-status {
+  padding: 1px 7px;
+  border: 1px solid var(--b-hair);
+  color: oklch(0.5 0.015 258);
+}
+.prob-status-failed {
+  color: var(--bad);
+  border-color: color-mix(in oklab, var(--bad) 40%, transparent);
+}
+.list-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 32px 0;
+}
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 24px;
+}
+.pager-at {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: oklch(0.5 0.015 258);
+}
+
 /* Loading / skeleton */
 .skeleton {
   background: oklch(0.92 0.008 250);

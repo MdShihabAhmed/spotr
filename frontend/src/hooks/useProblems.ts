@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getProblem,
   ingestProblem,
+  listProblems,
   normalizeProblem,
   streamProblemStatus,
   type IngestRequest,
@@ -20,6 +21,16 @@ export function useIngestProblem() {
 export function useNormalize() {
   return useMutation({
     mutationFn: (body: { text?: string; images?: string[] }) => normalizeProblem(body),
+  });
+}
+
+/** A page of problems, newest first. `keepPreviousData` avoids a flash of empty list when
+ *  paging. */
+export function useProblemList(page: number, pageSize = 20) {
+  return useQuery({
+    queryKey: ["problems", page, pageSize],
+    queryFn: () => listProblems(page, pageSize),
+    placeholderData: (prev) => prev,
   });
 }
 

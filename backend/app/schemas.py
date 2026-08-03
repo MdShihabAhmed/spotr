@@ -119,6 +119,32 @@ class ProblemOut(BaseModel):
     level_count: int = 0
 
 
+class ProblemSummary(BaseModel):
+    """A lightweight row for the problems list — just enough to show and link. Deliberately
+    omits the heavy fields (statement, figures, samples) so a page stays small."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    slug: str
+    title: str
+    source: str
+    external_id: str
+    rating: int | None
+    tags: list[str]
+    ingestion_status: str
+    created_at: datetime
+    level_count: int = 0
+
+
+class ProblemListOut(BaseModel):
+    """A page of problems, most-recent first."""
+
+    items: list[ProblemSummary]
+    total: int
+    page: int
+    page_size: int
+
+
 # --- Tutor (step 6) ----------------------------------------------------------
 class RevealedLevel(BaseModel):
     """An UNLOCKED ladder rung, with how it was unlocked. Only revealed levels are ever

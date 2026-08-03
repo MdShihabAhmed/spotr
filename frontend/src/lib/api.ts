@@ -161,6 +161,29 @@ export const ingestProblem = (body: IngestRequest) =>
 
 export const getProblem = (slug: string) => api.get<Problem>(`/problems/${slug}`);
 
+/** A slim row for the problems list (mirrors backend ProblemSummary). */
+export type ProblemSummary = {
+  slug: string;
+  title: string;
+  source: string;
+  external_id: string;
+  rating: number | null;
+  tags: string[];
+  ingestion_status: IngestionStatus;
+  created_at: string;
+  level_count: number;
+};
+
+export type ProblemList = {
+  items: ProblemSummary[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
+export const listProblems = (page = 1, pageSize = 20) =>
+  api.get<ProblemList>(`/problems?page=${page}&page_size=${pageSize}`);
+
 export type ProblemStatusHandlers = {
   onStatus: (status: IngestionStatus, error: string | null) => void;
   onError: (detail: string) => void;

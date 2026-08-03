@@ -1,8 +1,10 @@
 import { Link } from "react-router-dom";
+import { useCurrentUser } from "../hooks/useAuth";
 
 /** Portfolio-facing about/landing. The hero's ladder card is the product's core mechanic
  *  (sealed levels) used as the hero image — mirrors the session rail exactly. */
 export function LandingPage() {
+  const { data: user } = useCurrentUser();
   return (
     <div>
       <section className="hero">
@@ -23,12 +25,25 @@ export function LandingPage() {
             cited every time.
           </p>
           <div className="hero-cta">
-            <Link to="/problems/new" className="btn">
-              add a problem
-            </Link>
-            <a href="#eval" className="btn btn-outline">
-              see the leakage eval
-            </a>
+            {user ? (
+              <>
+                <Link to="/problems/new" className="btn">
+                  add a problem
+                </Link>
+                <Link to="/problems" className="btn btn-outline">
+                  your problems
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link to="/register" className="btn">
+                  get started
+                </Link>
+                <Link to="/login" className="btn btn-outline">
+                  sign in
+                </Link>
+              </>
+            )}
           </div>
           <pre className="cmd">
             {`git clone spotr && cd spotr

@@ -5,6 +5,7 @@ import { AccountPage } from "./pages/AccountPage";
 import { IngestPage } from "./pages/IngestPage";
 import { LandingPage } from "./pages/LandingPage";
 import { LoginPage } from "./pages/LoginPage";
+import { ProblemsListPage } from "./pages/ProblemsListPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { SessionPage } from "./pages/SessionPage";
 import "./App.css";
@@ -15,6 +16,11 @@ function Protected({ children }: { children: React.ReactNode }) {
       <Layout>{children}</Layout>
     </ProtectedRoute>
   );
+}
+
+/** Public shell — the marketing landing is reachable signed-out; the nav adapts to auth. */
+function Public({ children }: { children: React.ReactNode }) {
+  return <Layout>{children}</Layout>;
 }
 
 /** Old `/problems/:slug/tutor` route folded into the session view at `/problems/:slug`. */
@@ -30,7 +36,8 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
 
-        <Route path="/" element={<Protected><LandingPage /></Protected>} />
+        <Route path="/" element={<Public><LandingPage /></Public>} />
+        <Route path="/problems" element={<Protected><ProblemsListPage /></Protected>} />
         <Route path="/problems/new" element={<Protected><IngestPage /></Protected>} />
         <Route path="/problems/:slug" element={<Protected><SessionPage /></Protected>} />
         <Route path="/account" element={<Protected><AccountPage /></Protected>} />

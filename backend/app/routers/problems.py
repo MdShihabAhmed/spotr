@@ -16,7 +16,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 
@@ -32,7 +32,14 @@ from app.queue import (
     wait_for_notification,
 )
 from app.database import async_session_maker
-from app.schemas import NormalizedOut, NormalizeRequest, ProblemIngest, ProblemOut
+from app.schemas import (
+    NormalizedOut,
+    NormalizeRequest,
+    ProblemIngest,
+    ProblemListOut,
+    ProblemOut,
+    ProblemSummary,
+)
 from app.sources import get_source
 
 router = APIRouter(prefix="/problems", tags=["problems"])
@@ -168,6 +175,44 @@ async def ingest_problem(
     await notify_job_enqueued(problem.id)
     response.status_code = 202
     return await _problem_out(db, problem)
+
+
+@router.get("", response_model=ProblemListOut)
+async def list_problems(
+    user: CurrentUser,
+    db: DbSession,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=50),
+):
+    """A page of problems, newest first. Slim rows (no statement/figures) so the list is cheap.
+    Ordered by `created_at` then `id` so ties are stable across pages."""
+    total = await db.scalar(select(func.count()).select_from(Problem)) or 0
+    rows = (
+        await db.scalars(
+            select(Problem)
+            .order_by(Problem.created_at.desc(), Problem.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+    ).all()
+
+    # One grouped query for the whole page's level counts, not N+1.
+    counts: dict[int, int] = {}
+    ids = [r.id for r in rows]
+    if ids:
+        result = await db.execute(
+            select(HintLevel.problem_id, func.count())
+            .where(HintLevel.problem_id.in_(ids))
+            .group_by(HintLevel.problem_id)
+        )
+        counts = {pid: c for pid, c in result.all()}
+
+    items = []
+    for row in rows:
+        summary = ProblemSummary.model_validate(row)
+        summary.level_count = counts.get(row.id, 0)
+        items.append(summary)
+    return ProblemListOut(items=items, total=total, page=page, page_size=page_size)
 
 
 @router.get("/{slug}", response_model=ProblemOut)

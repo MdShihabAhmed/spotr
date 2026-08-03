@@ -19,23 +19,42 @@ export function Layout({ children }: { children: ReactNode }) {
           </span>
         </Link>
 
-        <NavLink to="/problems/new" className="nav-item">
-          add problem
-        </NavLink>
-        <NavLink to="/" end className="nav-item">
-          about
-        </NavLink>
+        {user ? (
+          <>
+            <NavLink to="/problems" end className="nav-item">
+              problems
+            </NavLink>
+            <NavLink to="/problems/new" className="nav-item">
+              add problem
+            </NavLink>
+          </>
+        ) : (
+          <NavLink to="/" end className="nav-item">
+            about
+          </NavLink>
+        )}
 
         <div className="nav-right">
           <span>free · your key · your machine</span>
-          {user && (
-            <Link to="/account" className="nav-signout" title={user.email}>
-              account
-            </Link>
+          {user ? (
+            <>
+              <Link to="/account" className="nav-signout" title={user.email}>
+                account
+              </Link>
+              <button type="button" className="nav-signout" onClick={logout}>
+                sign out
+              </button>
+            </>
+          ) : (
+            <>
+              <Link to="/login" className="nav-signout">
+                sign in
+              </Link>
+              <Link to="/register" className="nav-signout">
+                get started
+              </Link>
+            </>
           )}
-          <button type="button" className="nav-signout" onClick={logout}>
-            sign out
-          </button>
           <span className="nav-dot" aria-hidden />
         </div>
       </header>
