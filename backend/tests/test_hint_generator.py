@@ -25,21 +25,53 @@ def _problem() -> Problem:
 
 def _valid_payload():
     return {
-        "level1": "Notice the size of n and the time limit.",
-        "level2": "Because n is large, an O(n^2) scan is too slow — think O(n log n).",
-        "level3": "Sort the array, then sweep with two pointers; this is correct because …",
-        "level4": "Full walkthrough: sort ascending, maintain two indices, and for each … "
-        "which yields the answer in O(n log n).",
+        "levels": [
+            "Notice the size of n and the time limit.",
+            "Because n is large, an O(n^2) scan is too slow — think O(n log n).",
+            "Sort the array, then sweep with two pointers; this is correct because …",
+            "Full walkthrough: sort ascending, maintain two indices, and for each … "
+            "which yields the answer in O(n log n).",
+        ]
     }
 
 
-async def test_returns_four_levels_from_valid_output():
+async def test_returns_ladder_from_valid_output():
     async def chat_fn(**kwargs):
         return _valid_payload()
 
     levels = await generate_hints(_problem(), chat_fn=chat_fn)
     assert len(levels) == 4
     assert levels[0].startswith("Notice")
+
+
+async def test_ladder_length_is_dynamic():
+    # A one-idea problem earns a short ladder; a layered one earns more. Both are valid —
+    # the count is not fixed to four.
+    async def three(**kwargs):
+        return {"levels": [
+            "Notice how tiny the constraint on w is.",
+            "Two even numbers always sum to an even number, so odd w is impossible.",
+            "Print YES iff w is even and w > 2.",
+        ]}
+
+    async def six(**kwargs):
+        return {"levels": [f"Reasoning rung number {i} with enough substance to pass." for i in range(6)]}
+
+    assert len(await generate_hints(_problem(), chat_fn=three)) == 3
+    assert len(await generate_hints(_problem(), chat_fn=six)) == 6
+
+
+async def test_too_few_or_too_many_levels_fail_validation():
+    async def one(**kwargs):
+        return {"levels": ["The single rung would spoil it outright, so this is rejected."]}
+
+    async def seven(**kwargs):
+        return {"levels": [f"Rung number {i} padded well past the minimum length here." for i in range(7)]}
+
+    with pytest.raises(HintGenerationError):
+        await generate_hints(_problem(), chat_fn=one)
+    with pytest.raises(HintGenerationError):
+        await generate_hints(_problem(), chat_fn=seven)
 
 
 async def test_prompt_includes_statement_constraints_and_editorial():
@@ -53,13 +85,13 @@ async def test_shorter_later_level_is_still_valid():
     # Regression: graduated hints increase in what they reveal, not in length. A crisp
     # final answer (level4) is often shorter than the level-3 reasoning — must NOT fail.
     async def chat_fn(**kwargs):
-        return {
-            "level1": "Look at how small the constraint on w is; efficiency is irrelevant here.",
-            "level2": "Two even numbers always sum to an even number, so odd w is impossible.",
-            "level3": "If w is even and greater than two, pick 2 and w-2, both even and positive; "
+        return {"levels": [
+            "Look at how small the constraint on w is; efficiency is irrelevant here.",
+            "Two even numbers always sum to an even number, so odd w is impossible.",
+            "If w is even and greater than two, pick 2 and w-2, both even and positive; "
             "only w=2 fails because 1+1 are odd.",
-            "level4": "Print YES iff w is even and w > 2.",
-        }
+            "Print YES iff w is even and w > 2.",
+        ]}
 
     levels = await generate_hints(_problem(), chat_fn=chat_fn)
     assert len(levels) == 4
@@ -69,7 +101,7 @@ async def test_shorter_later_level_is_still_valid():
 async def test_duplicate_levels_fail_validation():
     async def chat_fn(**kwargs):
         dup = _valid_payload()
-        dup["level2"] = dup["level1"]  # two identical levels aren't graduated
+        dup["levels"][1] = dup["levels"][0]  # two identical levels aren't graduated
         return dup
 
     with pytest.raises(HintGenerationError):
@@ -83,7 +115,7 @@ async def test_empty_level_fails_validation_then_raises():
         nonlocal calls
         calls += 1
         bad = _valid_payload()
-        bad["level3"] = "   "  # empty after strip
+        bad["levels"][2] = "   "  # empty after strip
         return bad
 
     with pytest.raises(HintGenerationError):

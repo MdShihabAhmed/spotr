@@ -133,6 +133,7 @@ class TutorSession(Base):
     user: Mapped["User"] = relationship(back_populates="sessions")
     problem: Mapped["Problem"] = relationship()
     messages: Mapped[list["SessionMessage"]] = relationship(back_populates="session")
+    unlocks: Mapped[list["LevelUnlock"]] = relationship(back_populates="session")
 
 
 class SessionMessage(Base):
@@ -149,6 +150,34 @@ class SessionMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     session: Mapped["TutorSession"] = relationship(back_populates="messages")
+
+
+class LevelUnlock(Base):
+    """How a ladder rung was unlocked — the metadata behind the design's "earned vs opened"
+    distinction. `TutorSession.revealed_levels` stays the authority for *which* levels are
+    unlocked (and the only thing that gates content into the prompt — the no-leakage seam);
+    this table records, per level, *how* it happened so the UI can render the right card:
+
+    - `via="chat"` (earned, green): the disclosure judge matched the student's own reasoning.
+      `earned_message_id` points at the user message the judge matched, so the unlock card can
+      quote their words back — and it survives a reload (the design's reward mechanism).
+    - `via="manual"` (opened, violet): the student revealed it sequentially; no earned message.
+    """
+
+    __tablename__ = "level_unlocks"
+    __table_args__ = (UniqueConstraint("session_id", "level"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("tutor_sessions.id"), index=True)
+    level: Mapped[int] = mapped_column(Integer)
+    via: Mapped[str] = mapped_column(String(16))  # "chat" | "manual"
+    earned_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("session_messages.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    session: Mapped["TutorSession"] = relationship(back_populates="unlocks")
+    earned_message: Mapped["SessionMessage | None"] = relationship()
 
 
 class GroundingChunk(Base):

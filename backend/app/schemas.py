@@ -121,16 +121,26 @@ class ProblemOut(BaseModel):
 
 # --- Tutor (step 6) ----------------------------------------------------------
 class RevealedLevel(BaseModel):
-    """An UNLOCKED ladder rung. Only revealed levels are ever serialized — locked content
-    stays server-side (the no-leakage guarantee)."""
+    """An UNLOCKED ladder rung, with how it was unlocked. Only revealed levels are ever
+    serialized — locked content stays server-side (the no-leakage guarantee).
+
+    `via` drives the design's earned (green) vs opened (violet) treatment; `earned_text` is
+    the student's own words the judge matched (chat unlocks only), quoted back in the unlock
+    card. `earned_message_id` + `unlocked_at` let the client place the card in the transcript
+    after a reload."""
 
     level: int
     content: str
+    via: str  # "chat" (earned) | "manual" (opened)
+    earned_text: str | None = None
+    earned_message_id: int | None = None
+    unlocked_at: datetime | None = None
 
 
 class TutorMessageOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    id: int
     role: str  # "user" | "assistant"
     content: str
     # Grounding chunks the assistant cited: [{source, title, url, page}].
@@ -139,8 +149,8 @@ class TutorMessageOut(BaseModel):
 
 
 class TutorSessionOut(BaseModel):
-    """Full tutor state for a problem: which rungs are unlocked (with content), how many
-    remain, the run status, and the durable chat history."""
+    """Full tutor state for a problem: which rungs are unlocked (with content + how), how
+    many remain, the run status, and the durable chat history."""
 
     slug: str
     status: str  # "active" | "solved" | "gave_up"
@@ -155,6 +165,7 @@ class RevealOut(BaseModel):
 
     level: int
     content: str
+    via: str = "manual"
     revealed_levels: list[int]
 
 

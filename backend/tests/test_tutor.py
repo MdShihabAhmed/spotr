@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import select
 
 from app.agents.tutor import DisclosureDecision, build_message_thread, judge_disclosure
-from app.models import HintLevel, Problem, SessionMessage, TutorSession
+from app.models import HintLevel, LevelUnlock, Problem, SessionMessage, TutorSession
 
 # Distinct sentinels per rung so a leak is unmistakable in assertions.
 LEVELS = [
@@ -125,11 +125,17 @@ async def test_reveal_is_sequential_then_exhausts(client, auth_headers, ready_sl
         body = r.json()
         assert body["level"] == expected
         assert body["content"] == LEVELS[expected - 1][1]
+        assert body["via"] == "manual"  # manual reveal → "opened"
         assert body["revealed_levels"] == list(range(1, expected + 1))
     # All unlocked → the next reveal is rejected.
     r = await client.post("/tutor/cf-1846C/reveal", headers=auth_headers)
     assert r.status_code == 409
     assert r.json()["code"] == "all_levels_revealed"
+
+    # Serialized state reports each rung as opened (violet), with no earned quote.
+    state = (await client.get("/tutor/cf-1846C", headers=auth_headers)).json()
+    assert [r["via"] for r in state["revealed"]] == ["manual"] * 4
+    assert all(r["earned_text"] is None for r in state["revealed"])
 
 
 async def test_tutor_rejects_unready_and_ladderless_problems(client, auth_headers, db_session_maker):
@@ -235,9 +241,25 @@ async def test_message_auto_unlocks_when_judge_demonstrates(
     events = _parse_sse(r.text)
     unlock = next(e for e in events if e["type"] == "unlock")
     assert unlock["level"] == 1
+    assert unlock["via"] == "chat"  # chat demonstration → "earned"
+    assert unlock["matched_message"] == "the array is sorted so we can sweep from both ends"
     done = next(e for e in events if e["type"] == "done")
     assert done["revealed_levels"] == [1]
+    assert "chunk_count" in done  # for the "In the prompt" panel
 
     async with db_session_maker() as db:
         session = await db.scalar(select(TutorSession))
         assert session.revealed_levels == [1]
+        # Earned unlock is persisted with the message that earned it (survives reload).
+        unlock_row = await db.scalar(select(LevelUnlock))
+        assert unlock_row.via == "chat"
+        assert unlock_row.level == 1
+        earned_msg = await db.get(SessionMessage, unlock_row.earned_message_id)
+        assert earned_msg.role == "user"
+        assert earned_msg.content == "the array is sorted so we can sweep from both ends"
+
+    # Serialized state quotes the earned message back and marks the rung green.
+    state = (await client.get("/tutor/cf-1846C", headers=auth_headers)).json()
+    earned = next(r for r in state["revealed"] if r["level"] == 1)
+    assert earned["via"] == "chat"
+    assert earned["earned_text"] == "the array is sorted so we can sweep from both ends"

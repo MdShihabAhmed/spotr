@@ -229,14 +229,27 @@ export const normalizeProblem = (body: { text?: string; images?: string[] }) =>
 export type Citation = { source: string; title: string; url: string; page: number | null };
 
 export type TutorMessage = {
+  // Present on server-persisted messages; absent on optimistic local ones.
+  id?: number;
   role: "user" | "assistant";
   content: string;
   citations: Citation[] | null;
   created_at: string;
 };
 
-/** An UNLOCKED ladder rung. Locked rungs are never sent — that's the no-leakage guarantee. */
-export type RevealedLevel = { level: number; content: string };
+/** How a rung was unlocked: "chat" = earned (green, quotes your words), "manual" = opened (violet). */
+export type UnlockVia = "chat" | "manual";
+
+/** An UNLOCKED ladder rung. Locked rungs are never sent — that's the no-leakage guarantee.
+ *  `earned_text` is the student's own words the judge matched (chat unlocks only). */
+export type RevealedLevel = {
+  level: number;
+  content: string;
+  via: UnlockVia;
+  earned_text: string | null;
+  earned_message_id: number | null;
+  unlocked_at: string | null;
+};
 
 export type TutorSession = {
   slug: string;
@@ -247,7 +260,12 @@ export type TutorSession = {
   messages: TutorMessage[];
 };
 
-export type RevealResult = { level: number; content: string; revealed_levels: number[] };
+export type RevealResult = {
+  level: number;
+  content: string;
+  via: UnlockVia;
+  revealed_levels: number[];
+};
 
 export const getTutorSession = (slug: string) => api.get<TutorSession>(`/tutor/${slug}`);
 
@@ -266,8 +284,13 @@ export async function authorizedFetch(path: string, init: RequestInit = {}): Pro
 
 export type TutorStreamHandlers = {
   onToken: (text: string) => void;
-  onUnlock: (level: number) => void;
-  onDone: (info: { revealed_levels: number[]; unlocked: number | null; citations: Citation[] }) => void;
+  onUnlock: (level: number, via: UnlockVia, matchedMessage: string) => void;
+  onDone: (info: {
+    revealed_levels: number[];
+    unlocked: number | null;
+    citations: Citation[];
+    chunk_count: number;
+  }) => void;
   onError: (detail: string) => void;
 };
 
@@ -303,7 +326,7 @@ export async function streamTutorMessage(
       if (!line) continue;
       const evt = JSON.parse(line.slice(5).trim());
       if (evt.type === "token") h.onToken(evt.text);
-      else if (evt.type === "unlock") h.onUnlock(evt.level);
+      else if (evt.type === "unlock") h.onUnlock(evt.level, evt.via, evt.matched_message);
       else if (evt.type === "done") h.onDone(evt);
       else if (evt.type === "error") h.onError(evt.detail);
     }

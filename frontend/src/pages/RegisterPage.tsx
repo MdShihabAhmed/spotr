@@ -27,52 +27,54 @@ export function RegisterPage() {
   const tooShort = password.length > 0 && password.length < MIN_PASSWORD;
 
   return (
-    <div className="centered">
+    <div className="auth-wrap">
       <form
-        className="card auth-card"
+        className="auth-card"
         onSubmit={(e) => {
           e.preventDefault();
           if (!tooShort) signUp.mutate({ email, password });
         }}
       >
-        <h1 className="auth-title">Create account</h1>
-        <p className="muted auth-sub">Start upsolving without spoilers.</p>
+        <h1>Create account</h1>
+        <p className="lede">Start upsolving without spoilers.</p>
 
-        <label htmlFor="email">Email</label>
-        <input
-          id="email"
-          type="email"
-          autoComplete="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
+        <div className="field">
+          <label htmlFor="email">Email</label>
+          <input
+            id="email"
+            className="input"
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
 
-        <label htmlFor="password">Password</label>
-        <input
-          id="password"
-          type="password"
-          autoComplete="new-password"
-          required
-          minLength={MIN_PASSWORD}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        <p className={tooShort ? "hint hint-warn" : "hint"}>
-          At least {MIN_PASSWORD} characters.
-        </p>
+        <div className="field">
+          <label htmlFor="password">Password</label>
+          <input
+            id="password"
+            className="input"
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={MIN_PASSWORD}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <p className="composer-hint" style={{ color: tooShort ? "var(--bad)" : undefined }}>
+            At least {MIN_PASSWORD} characters.
+          </p>
+        </div>
 
-        {signUp.isError && <p className="error">{messageFor(signUp.error)}</p>}
+        {signUp.isError && <div className="error-box" style={{ marginBottom: 14 }}>{messageFor(signUp.error)}</div>}
 
-        <button
-          type="submit"
-          className="btn btn-primary"
-          disabled={signUp.isPending || tooShort}
-        >
-          {signUp.isPending ? "Creating…" : "Create account"}
+        <button type="submit" className="btn" disabled={signUp.isPending || tooShort}>
+          {signUp.isPending ? "creating…" : "create account"}
         </button>
 
-        <p className="muted switch">
+        <p className="switch">
           Already have one? <Link to="/login">Sign in</Link>
         </p>
       </form>

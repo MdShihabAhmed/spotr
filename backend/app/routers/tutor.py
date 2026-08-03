@@ -31,7 +31,7 @@ from app.dependencies import CurrentUser, DbSession
 from app.errors import ApiError
 from app.ingestion.grounding import retrieve_grounding
 from app.llm import stream_completion
-from app.models import HintLevel, Problem, SessionMessage, TutorSession
+from app.models import HintLevel, LevelUnlock, Problem, SessionMessage, TutorSession
 from app.schemas import (
     MessageRequest,
     RevealedLevel,
@@ -87,6 +87,11 @@ async def _get_or_create_session(
     return session
 
 
+async def _unlocks_map(db: AsyncSession, session_id: int) -> dict[int, LevelUnlock]:
+    rows = await db.scalars(select(LevelUnlock).where(LevelUnlock.session_id == session_id))
+    return {u.level: u for u in rows}
+
+
 async def _serialize(db: AsyncSession, problem: Problem, session: TutorSession) -> TutorSessionOut:
     levels = await _levels_map(db, problem.id)
     revealed = sorted(session.revealed_levels or [])
@@ -97,11 +102,31 @@ async def _serialize(db: AsyncSession, problem: Problem, session: TutorSession) 
             .order_by(SessionMessage.created_at, SessionMessage.id)
         )
     ).all()
+    by_id = {m.id: m.content for m in msgs}
+    unlocks = await _unlocks_map(db, session.id)
+
+    revealed_out: list[RevealedLevel] = []
+    for lvl in revealed:
+        if lvl not in levels:
+            continue
+        u = unlocks.get(lvl)
+        # Rows unlocked before this table existed default to "opened" (no earned message).
+        revealed_out.append(
+            RevealedLevel(
+                level=lvl,
+                content=levels[lvl],
+                via=u.via if u else "manual",
+                earned_text=by_id.get(u.earned_message_id) if u and u.earned_message_id else None,
+                earned_message_id=u.earned_message_id if u else None,
+                unlocked_at=u.created_at if u else None,
+            )
+        )
+
     return TutorSessionOut(
         slug=problem.slug,
         status=session.status,
         revealed_levels=revealed,
-        revealed=[RevealedLevel(level=lvl, content=levels[lvl]) for lvl in revealed if lvl in levels],
+        revealed=revealed_out,
         level_count=len(levels),
         messages=[TutorMessageOut.model_validate(m) for m in msgs],
     )
@@ -128,8 +153,9 @@ async def reveal(slug: str, user: CurrentUser, db: DbSession):
         raise ApiError(409, "all_levels_revealed", "Every hint is already unlocked.")
     revealed.append(nxt)
     session.revealed_levels = revealed  # reassign so SQLAlchemy tracks the JSON change
+    db.add(LevelUnlock(session_id=session.id, level=nxt, via="manual"))
     await db.commit()
-    return RevealOut(level=nxt, content=levels[nxt], revealed_levels=sorted(revealed))
+    return RevealOut(level=nxt, content=levels[nxt], via="manual", revealed_levels=sorted(revealed))
 
 
 def _sse(data: dict) -> str:
@@ -169,8 +195,10 @@ async def _stream_turn(*, user_id: int, problem_id: int, content: str) -> AsyncI
         ).all()
         history = [(m.role, m.content) for m in prior]
 
-        db.add(SessionMessage(session_id=session.id, role="user", content=content))
+        user_msg = SessionMessage(session_id=session.id, role="user", content=content)
+        db.add(user_msg)
         await db.commit()
+        await db.refresh(user_msg)  # need its id to attribute a chat unlock to this message
 
         # 1) Grounding retrieval — enrichment, never required. Failure (e.g. unseeded
         #    corpus / no key) degrades to no citations rather than breaking the chat.
@@ -181,7 +209,8 @@ async def _stream_turn(*, user_id: int, problem_id: int, content: str) -> AsyncI
         citations = [h.citation() for h in hits]
 
         # 2) Conservative disclosure judge on the NEXT rung only (sequential). Unlock just
-        #    that rung if the student demonstrably figured it out themselves.
+        #    that rung if the student demonstrably figured it out themselves — an "earned"
+        #    unlock, attributed to this message so the card can quote their words.
         nxt = (max(revealed) if revealed else 0) + 1
         unlocked: int | None = None
         if session.status == "active" and nxt in levels and nxt not in revealed:
@@ -189,9 +218,19 @@ async def _stream_turn(*, user_id: int, problem_id: int, content: str) -> AsyncI
             if decision.demonstrated:
                 revealed.append(nxt)
                 session.revealed_levels = sorted(revealed)
+                db.add(
+                    LevelUnlock(
+                        session_id=session.id,
+                        level=nxt,
+                        via="chat",
+                        earned_message_id=user_msg.id,
+                    )
+                )
                 await db.commit()
                 unlocked = nxt
-                yield _sse({"type": "unlock", "level": nxt})
+                yield _sse(
+                    {"type": "unlock", "level": nxt, "via": "chat", "matched_message": content}
+                )
 
         # 3) Build the thread from ONLY unlocked rungs (+ grounding + history), then stream.
         revealed_contents = [(lvl, levels[lvl]) for lvl in sorted(revealed) if lvl in levels]
@@ -229,6 +268,9 @@ async def _stream_turn(*, user_id: int, problem_id: int, content: str) -> AsyncI
             {
                 "type": "done",
                 "citations": citations,
+                # Retrieved-chunk count for the "In the prompt" panel (all retrieved hits are
+                # cited, so this equals len(citations); surfaced explicitly for the UI).
+                "chunk_count": len(hits),
                 "revealed_levels": sorted(revealed),
                 "unlocked": unlocked,
             }

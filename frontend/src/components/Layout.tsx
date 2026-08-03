@@ -1,35 +1,45 @@
 import type { ReactNode } from "react";
-import { NavLink } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import { useCurrentUser, useLogout } from "../hooks/useAuth";
 
+/** The fixed 54px dark nav on every screen. The mark is a half-revealed ladder (top half
+ *  lit): the product's mechanic as its logo. "free · your key · your machine" is positioning,
+ *  and it stands in for the account menu a hosted app would put there. */
 export function Layout({ children }: { children: ReactNode }) {
   const { data: user } = useCurrentUser();
   const logout = useLogout();
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <div className="brand">
-          Forces<span className="brand-accent">AI</span>
-        </div>
+    <>
+      <header className="nav-bar">
+        <Link to="/" className="nav-mark">
+          <span className="nav-glyph" aria-hidden />
+          <span className="nav-word">
+            forces<em>ai</em>
+          </span>
+        </Link>
 
-        <nav className="nav">
-          <NavLink to="/" end>
-            Dashboard
-          </NavLink>
-          <NavLink to="/ingest">Ingest</NavLink>
-          <NavLink to="/account">Account</NavLink>
-        </nav>
+        <NavLink to="/problems/new" className="nav-item">
+          add problem
+        </NavLink>
+        <NavLink to="/" end className="nav-item">
+          about
+        </NavLink>
 
-        <div className="topbar-right">
-          <span className="muted email">{user?.email}</span>
-          <button type="button" className="btn btn-ghost" onClick={logout}>
-            Sign out
+        <div className="nav-right">
+          <span>free · your key · your machine</span>
+          {user && (
+            <Link to="/account" className="nav-signout" title={user.email}>
+              account
+            </Link>
+          )}
+          <button type="button" className="nav-signout" onClick={logout}>
+            sign out
           </button>
+          <span className="nav-dot" aria-hidden />
         </div>
       </header>
-
-      <main className="content">{children}</main>
-    </div>
+      <main>{children}</main>
+    </>
   );
 }

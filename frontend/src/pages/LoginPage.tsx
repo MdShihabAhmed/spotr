@@ -22,46 +22,52 @@ export function LoginPage() {
   if (tokens.access()) return <Navigate to="/" replace />;
 
   return (
-    <div className="centered">
+    <div className="auth-wrap">
       <form
-        className="card auth-card"
+        className="auth-card"
         onSubmit={(e) => {
           e.preventDefault();
           login.mutate({ email, password });
         }}
       >
-        <h1 className="auth-title">
-          Forces<span className="brand-accent">AI</span>
+        <h1>
+          forces<span style={{ color: "var(--earned)" }}>ai</span>
         </h1>
-        <p className="muted auth-sub">Upsolve Codeforces problems properly.</p>
+        <p className="lede">Upsolve Codeforces problems properly.</p>
 
-        <label htmlFor="email">Email</label>
-        <input
-          id="email"
-          type="email"
-          autoComplete="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
+        <div className="field">
+          <label htmlFor="email">Email</label>
+          <input
+            id="email"
+            className="input"
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
 
-        <label htmlFor="password">Password</label>
-        <input
-          id="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        <div className="field">
+          <label htmlFor="password">Password</label>
+          <input
+            id="password"
+            className="input"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
 
-        {login.isError && <p className="error">{messageFor(login.error)}</p>}
+        {login.isError && <div className="error-box" style={{ marginBottom: 14 }}>{messageFor(login.error)}</div>}
 
-        <button type="submit" className="btn btn-primary" disabled={login.isPending}>
-          {login.isPending ? "Signing in…" : "Sign in"}
+        <button type="submit" className="btn" disabled={login.isPending}>
+          {login.isPending ? "signing in…" : "sign in"}
         </button>
 
-        <p className="muted switch">
+        <p className="switch">
           No account? <Link to="/register">Create one</Link>
         </p>
       </form>
