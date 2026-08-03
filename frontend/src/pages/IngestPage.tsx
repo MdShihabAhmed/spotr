@@ -184,7 +184,7 @@ export function IngestPage() {
     <div className="page">
       <h1 className="h1-ingest">Bring the problem to it.</h1>
       <p className="lede">
-        ForcesAI never scrapes a problem page. You paste the statement or drop a screenshot —
+        Spotr never scrapes a problem page. You paste the statement or drop a screenshot —
         figures included. It fetches only what the official API permits: metadata, and the
         editorial from a link you supply. The editorial is read once, at ingestion, and never sent
         back to your browser.

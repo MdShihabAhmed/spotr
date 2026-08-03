@@ -34,7 +34,7 @@ from app.queue import (
 )
 from app.models import Problem  # noqa: F401 — ensures mappers are configured before a claim
 
-logger = logging.getLogger("forcesai.worker")
+logger = logging.getLogger("spotr.worker")
 
 
 async def drain_queue(

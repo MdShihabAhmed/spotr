@@ -1,4 +1,4 @@
-# dev.ps1 — one-command local dev for ForcesAI on Windows.
+# dev.ps1 — one-command local dev for Spotr on Windows.
 #
 # Why this exists instead of honcho: honcho sits between you and uvicorn and
 # forwards stop signals badly on Windows (no real SIGKILL, no process-group

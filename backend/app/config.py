@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     # Core services
-    database_url: str = "postgresql://forcesai_user:password@localhost:5432/forcesai"
+    database_url: str = "postgresql://spotr_user:password@localhost:5432/spotr"
     redis_url: str = "redis://localhost:6379/0"
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: str = ""

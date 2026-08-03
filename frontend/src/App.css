@@ -1,4 +1,4 @@
-/* ForcesAI — flat, oklch, three-zone design. No radius, no shadows: separation comes from
+/* Spotr — flat, oklch, three-zone design. No radius, no shadows: separation comes from
    value + hairlines only (see design_handoff). Two type roles share a family by default but
    stay separate vars; mono carries all metadata/code. */
 

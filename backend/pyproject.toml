@@ -1,7 +1,7 @@
 [project]
-name = "forcesai"
+name = "spotr"
 version = "0.1.0"
-description = "ForcesAI — AI-powered upsolving mentor for competitive programmers: graduated editorial hints, stress-test-verified pitfall checking, and practice recommendations."
+description = "Spotr — a grounded Socratic tutor for competitive programmers who want to upsolve: a graduated hint ladder that never reveals more than you've earned, grounded in openly-licensed references with citations."
 requires-python = ">=3.14"
 dependencies = [
     "alembic>=1.18.5",

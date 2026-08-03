@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="ForcesAI",
+    title="Spotr",
     description="Graduated editorial hints, stress-test-verified pitfall checking, "
     "and practice recommendations for competitive programmers.",
     lifespan=lifespan,

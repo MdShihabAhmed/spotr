@@ -25,7 +25,7 @@ from app.sources.base import (
 )
 
 API_BASE = "https://codeforces.com/api"
-USER_AGENT = "ForcesAI/0.1 (+https://github.com/; upsolving-mentor)"
+USER_AGENT = "Spotr/0.1 (+https://github.com/; upsolving-mentor)"
 
 _PROBLEMSET_CACHE_KEY = "cf:problemset:problems"
 _PROBLEMSET_TTL_SECONDS = 24 * 60 * 60

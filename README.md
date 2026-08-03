@@ -1,10 +1,10 @@
-# ForcesAI
+# Spotr
 
 A **grounded Socratic tutor** for competitive programmers who want to *upsolve* — to
 understand a problem they couldn't crack, without being handed the answer.
 
 Most "AI help" for competitive programming just prints the solution, which teaches nothing.
-ForcesAI instead runs a **conversation that never reveals more than you've earned**: it
+Spotr instead runs a **conversation that never reveals more than you've earned**: it
 guides you with questions, unlocks the next hint only when you demonstrate you've reached it
 yourself, and grounds its explanations in openly-licensed references with citations.
 
@@ -133,7 +133,7 @@ screenshot of the statement), then open the tutor.
 
 ## 4. LLM configuration
 
-ForcesAI is **provider-agnostic**. It talks to any **OpenAI-compatible** endpoint via the
+Spotr is **provider-agnostic**. It talks to any **OpenAI-compatible** endpoint via the
 OpenAI SDK, so switching providers is a `.env` edit — no code change. The default targets
 **Google Gemini's free tier**; OpenAI, Groq, OpenRouter, Together, a local Ollama/vLLM, etc.
 all work by changing `LLM_BASE_URL` + the key + model names.

@@ -31,7 +31,7 @@ export function LoginPage() {
         }}
       >
         <h1>
-          forces<span style={{ color: "var(--earned)" }}>ai</span>
+          spot<span style={{ color: "var(--earned)" }}>r</span>
         </h1>
         <p className="lede">Upsolve Codeforces problems properly.</p>
 

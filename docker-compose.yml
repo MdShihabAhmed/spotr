@@ -1,6 +1,6 @@
-# Pinned so volume names (forcesai_pgdata, …) don't silently change if the repo
+# Pinned so volume names (spotr_pgdata, …) don't silently change if the repo
 # directory is renamed — Compose otherwise derives the project name from it.
-name: forcesai
+name: spotr
 
 # Full self-host stack: `docker compose up -d` builds and runs everything
 # (postgres + redis + qdrant + migrate + api + worker + frontend). BYOK: put your key in
@@ -12,7 +12,7 @@ name: forcesai
 # localhost values for `uv run` dev).
 
 x-backend-env: &backend-env
-  DATABASE_URL: postgresql://forcesai_user:password@postgres:5432/forcesai
+  DATABASE_URL: postgresql://spotr_user:password@postgres:5432/spotr
   REDIS_URL: redis://redis:6379/0
   QDRANT_URL: http://qdrant:6333
 
@@ -21,15 +21,15 @@ services:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: forcesai_user
+      POSTGRES_USER: spotr_user
       POSTGRES_PASSWORD: password
-      POSTGRES_DB: forcesai
+      POSTGRES_DB: spotr
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U forcesai_user -d forcesai"]
+      test: ["CMD-SHELL", "pg_isready -U spotr_user -d spotr"]
       interval: 5s
       timeout: 3s
       retries: 10

@@ -31,7 +31,7 @@ export function LandingPage() {
             </a>
           </div>
           <pre className="cmd">
-            {`git clone forcesai && cd forcesai
+            {`git clone spotr && cd spotr
 echo GEMINI_API_KEY=… > .env
 docker compose up`}
           </pre>

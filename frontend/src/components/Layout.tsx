@@ -15,7 +15,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <Link to="/" className="nav-mark">
           <span className="nav-glyph" aria-hidden />
           <span className="nav-word">
-            forces<em>ai</em>
+            spot<em>r</em>
           </span>
         </Link>
 
