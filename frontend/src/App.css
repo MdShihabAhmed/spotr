@@ -1461,6 +1461,10 @@ p {
   color: oklch(0.5 0.12 250);
   animation: fai-blink 1.6s infinite;
 }
+.src-status-retrying {
+  color: oklch(0.58 0.13 70);
+  border-color: color-mix(in oklab, oklch(0.58 0.13 70) 40%, transparent);
+}
 .src-remove {
   background: none;
   border: none;

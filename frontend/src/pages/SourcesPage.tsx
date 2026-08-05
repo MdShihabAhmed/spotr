@@ -16,7 +16,19 @@ const STATUS_TEXT: Record<GroundingSource["status"], string> = {
   embedding: "embedding…",
   ready: "ready",
   failed: "failed",
+  retrying: "waiting to retry",
 };
+
+const ACTIVE = new Set<GroundingSource["status"]>(["pending", "cloning", "embedding"]);
+
+/** A rough "in ~24h / ~15m" for a scheduled retry time. */
+function relTime(iso: string): string {
+  const ms = new Date(iso).getTime() - Date.now();
+  if (ms <= 0) return "shortly";
+  const mins = Math.round(ms / 60000);
+  if (mins < 90) return `in ~${mins}m`;
+  return `in ~${Math.round(mins / 60)}h`;
+}
 
 const CONSENT =
   "This runs on your machine and embeds on your own key. I confirm I have the right to use this source.";
@@ -155,7 +167,6 @@ function Consent({ ack, setAck }: { ack: boolean; setAck: (v: boolean) => void }
 
 function SourceRow({ s }: { s: GroundingSource }) {
   const del = useDeleteSource();
-  const busy = s.status !== "ready" && s.status !== "failed";
   return (
     <li className="src-row">
       <span className="src-label">
@@ -163,7 +174,7 @@ function SourceRow({ s }: { s: GroundingSource }) {
         <span className="src-kind">{s.kind}</span>
       </span>
       <span className="src-meta">
-        {s.status === "ready" && <span className="src-count">{s.chunk_count} chunks</span>}
+        {s.chunk_count > 0 && <span className="src-count">{s.chunk_count} chunks</span>}
         <span className={`src-status src-status-${s.status}`}>{STATUS_TEXT[s.status]}</span>
         <button
           className="src-remove"
@@ -175,7 +186,16 @@ function SourceRow({ s }: { s: GroundingSource }) {
         </button>
       </span>
       {s.status === "failed" && s.error && <span className="src-error">{s.error}</span>}
-      {busy && <span className="src-error src-working">working — this can take a while on your key.</span>}
+      {s.status === "retrying" && (
+        <span className="src-error src-working">
+          {s.retry_at ? `retries ${relTime(s.retry_at)}` : "will retry"}
+          {s.chunk_count > 0 ? ` · resumes from ${s.chunk_count} embedded` : ""}
+          {s.error ? ` — ${s.error}` : ""}
+        </span>
+      )}
+      {ACTIVE.has(s.status) && (
+        <span className="src-error src-working">working — this can take a while on your key.</span>
+      )}
     </li>
   );
 }

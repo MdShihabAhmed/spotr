@@ -357,7 +357,13 @@ export async function streamTutorMessage(
 }
 
 // --- Grounding sources (bring your own references) ---------------------------
-export type GroundingSourceStatus = "pending" | "cloning" | "embedding" | "ready" | "failed";
+export type GroundingSourceStatus =
+  | "pending"
+  | "cloning"
+  | "embedding"
+  | "ready"
+  | "failed"
+  | "retrying";
 
 export type GroundingSource = {
   id: number;
@@ -369,6 +375,8 @@ export type GroundingSource = {
   error: string | null;
   chunk_count: number;
   created_at: string;
+  // When a `retrying` source becomes eligible again (e.g. after the daily quota resets).
+  retry_at: string | null;
 };
 
 export const listSources = () => api.get<{ items: GroundingSource[] }>("/grounding/sources");

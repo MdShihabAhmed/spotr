@@ -7,17 +7,26 @@ import {
   type GroundingSource,
 } from "../lib/api";
 
-const TERMINAL: ReadonlySet<GroundingSource["status"]> = new Set(["ready", "failed"]);
+const ACTIVE: ReadonlySet<GroundingSource["status"]> = new Set([
+  "pending",
+  "cloning",
+  "embedding",
+]);
 const sourcesKey = ["grounding-sources"] as const;
 
-/** List grounding sources. While any source is still processing, poll so its status + chunk
- *  count converge (cloning/embedding can take a while). */
+/** List grounding sources. Poll fast (2s) while a source is actively processing so its status +
+ *  chunk count converge; poll slowly (30s) while one is only waiting on a scheduled retry (a
+ *  quota wait can be ~24h — no point hammering); otherwise stop. */
 export function useSources() {
   return useQuery({
     queryKey: sourcesKey,
     queryFn: listSources,
-    refetchInterval: (q) =>
-      q.state.data?.items.some((s) => !TERMINAL.has(s.status)) ? 2000 : false,
+    refetchInterval: (q) => {
+      const items = q.state.data?.items ?? [];
+      if (items.some((s) => ACTIVE.has(s.status))) return 2000;
+      if (items.some((s) => s.status === "retrying")) return 30_000;
+      return false;
+    },
   });
 }
 

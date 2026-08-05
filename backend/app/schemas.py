@@ -217,10 +217,11 @@ class GroundingSourceOut(BaseModel):
     label: str
     source_key: str
     location: str
-    status: str  # pending | cloning | embedding | ready | failed
+    status: str  # pending | cloning | embedding | ready | failed | retrying
     error: str | None
     chunk_count: int
     created_at: datetime
+    retry_at: datetime | None = None
 
 
 class GroundingSourceListOut(BaseModel):

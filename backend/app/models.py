@@ -217,6 +217,9 @@ class GroundingSource(Base):
     # unique, ≤32 to fit GroundingChunk.source.
     source_key: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     location: Mapped[str] = mapped_column(String(512))  # repo URL, or stored PDF path/name
+    # Lifecycle: pending → cloning → embedding → ready | failed, plus `retrying` (a scheduled
+    # auto-retry — a rate-limit/quota hit waits ~24h for the daily reset, other errors back off
+    # briefly). A `retrying` row is re-claimed once `retry_at` passes.
     status: Mapped[str] = mapped_column(String(24), default="pending", index=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -225,3 +228,5 @@ class GroundingSource(Base):
     # Durable-queue bookkeeping (mirrors Problem): when a worker claimed it, and how many tries.
     claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
+    # When a `retrying` row becomes eligible to claim again (null unless scheduled for retry).
+    retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

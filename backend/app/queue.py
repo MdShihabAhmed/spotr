@@ -25,7 +25,7 @@ from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
 
 import psycopg
-from sqlalchemy import select, text
+from sqlalchemy import and_, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -168,14 +168,26 @@ async def enqueue_source(db: AsyncSession, source: GroundingSource) -> None:
     source.status = "pending"
     source.error = None
     source.claimed_at = None
+    source.retry_at = None
     await db.commit()
 
 
 async def claim_next_source(db: AsyncSession) -> int | None:
-    """Atomically claim one pending grounding source. Returns its id, or None if none pending."""
+    """Atomically claim one grounding source that's ready to run: `pending`, or `retrying` with
+    its `retry_at` now due. Returns its id, or None if none are ready."""
+    now = datetime.now(timezone.utc)
     source = await db.scalar(
         select(GroundingSource)
-        .where(GroundingSource.status == "pending")
+        .where(
+            or_(
+                GroundingSource.status == "pending",
+                and_(
+                    GroundingSource.status == "retrying",
+                    GroundingSource.retry_at.is_not(None),
+                    GroundingSource.retry_at <= now,
+                ),
+            )
+        )
         .order_by(GroundingSource.id)
         .limit(1)
         .with_for_update(skip_locked=True)
@@ -184,6 +196,7 @@ async def claim_next_source(db: AsyncSession) -> int | None:
         return None
     source.status = "cloning"  # first in-flight state
     source.claimed_at = datetime.now(timezone.utc)
+    source.retry_at = None  # it's running now, not waiting
     source.attempts += 1
     await db.commit()
     await notify_source_status(source.id)

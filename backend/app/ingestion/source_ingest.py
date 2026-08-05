@@ -11,16 +11,44 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.config import get_settings
 from app.database import async_session_maker
 from app.ingestion.grounding import ingest_corpus, loader_for_source
+from app.llm import LLMRateLimitError
 from app.models import GroundingChunk, GroundingSource
 from app.queue import notify_source_status
 
 logger = logging.getLogger("spotr.grounding")
+
+
+async def _schedule_retry(
+    session_maker: async_sessionmaker[AsyncSession],
+    source_id: int,
+    *,
+    delay_seconds: float,
+    error: str,
+    reset_attempts: bool = False,
+) -> None:
+    """Park a source in `retrying` with a future `retry_at`; the worker re-claims it once due,
+    and resume skips already-embedded chunks. `reset_attempts` keeps a quota wait (external,
+    not the job's fault) from counting toward the error-retry cap."""
+    retry_at = datetime.now(timezone.utc) + timedelta(seconds=delay_seconds)
+    async with session_maker() as db:
+        src = await db.get(GroundingSource, source_id)
+        if src is None:
+            return
+        src.status = "retrying"
+        src.error = error[:1000]
+        src.retry_at = retry_at
+        if reset_attempts:
+            src.attempts = 0
+        await db.commit()
+    await notify_source_status(source_id)
 
 
 async def _set_status(
@@ -78,6 +106,35 @@ async def ingest_source(
                 .where(GroundingChunk.source == source_key)
             )
         await _set_status(session_maker, source_id, "ready", error="", chunk_count=total or 0)
-    except Exception as exc:  # noqa: BLE001 — any failure must land as a visible `failed`
+    except LLMRateLimitError as exc:
+        # Quota/rate-limit during embedding — not a bad job, just out of budget. Reschedule far
+        # out (free-tier daily reset) and don't count it toward the error-retry cap. Already-
+        # embedded chunks are saved, so the retry resumes rather than restarting.
+        settings = get_settings()
+        logger.warning("grounding source %s rate-limited; retrying in ~%ss", source_id, settings.source_ratelimit_retry_seconds)
+        await _schedule_retry(
+            session_maker,
+            source_id,
+            delay_seconds=settings.source_ratelimit_retry_seconds,
+            error=f"Embedding hit the rate limit / daily quota — will retry automatically once it resets. ({exc})",
+            reset_attempts=True,
+        )
+    except Exception as exc:  # noqa: BLE001 — any other failure: back off a few times, then fail
         logger.exception("grounding source %s failed", source_id)
-        await _set_status(session_maker, source_id, "failed", error=str(exc) or exc.__class__.__name__)
+        settings = get_settings()
+        async with session_maker() as db:
+            row = await db.get(GroundingSource, source_id)
+            attempts = row.attempts if row else settings.source_max_error_attempts
+        detail = str(exc) or exc.__class__.__name__
+        if attempts >= settings.source_max_error_attempts:
+            await _set_status(
+                session_maker, source_id, "failed",
+                error=f"{detail} (gave up after {attempts} attempts)",
+            )
+        else:
+            await _schedule_retry(
+                session_maker,
+                source_id,
+                delay_seconds=settings.source_error_retry_seconds,
+                error=f"{detail} — will retry automatically (attempt {attempts}).",
+            )

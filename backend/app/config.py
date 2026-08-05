@@ -77,6 +77,14 @@ class Settings(BaseSettings):
     worker_stuck_timeout_seconds: int = 600  # re-queue a job whose worker died mid-run
     worker_max_attempts: int = 3  # after this many claims, a stuck job is failed, not retried
 
+    # Grounding-source auto-retry: on a rate-limit/quota exhaustion (embedding), reschedule this
+    # far out (free-tier daily cap resets in ~24h); on any other error, a short backoff up to
+    # `source_max_error_attempts` claims, then terminal failure. Resume skips already-embedded
+    # chunks, so a retry continues where it stopped.
+    source_ratelimit_retry_seconds: int = 86_400  # 24h
+    source_error_retry_seconds: int = 900  # 15 min
+    source_max_error_attempts: int = 5
+
     # Observability
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""

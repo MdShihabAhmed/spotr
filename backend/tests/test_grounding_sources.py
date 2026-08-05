@@ -135,6 +135,110 @@ async def test_drain_sources_claims_and_processes(db_session_maker):
         assert (await db.get(GroundingSource, sid)).status == "ready"
 
 
+class _DummyLoader:
+    source = "x"
+
+    def ensure_local(self):
+        from pathlib import Path
+
+        return Path(".")
+
+    def load(self, local):
+        return iter([])
+
+
+async def _seed_claimed(db_session_maker, *, key, attempts):
+    """A source in an in-flight state (as if just claimed), ready for ingest_source to run."""
+    async with db_session_maker() as db:
+        s = GroundingSource(
+            kind="github", label="R", source_key=key, location=REPO,
+            status="cloning", license_ack=True, attempts=attempts,
+        )
+        db.add(s)
+        await db.commit()
+        return s.id
+
+
+async def test_ratelimit_schedules_retry_and_resets_attempts(db_session_maker, monkeypatch):
+    from app.ingestion import source_ingest as si
+    from app.llm import LLMRateLimitError
+
+    sid = await _seed_claimed(db_session_maker, key="rl", attempts=3)
+    monkeypatch.setattr(si, "loader_for_source", lambda src: _DummyLoader())
+
+    async def boom(*a, **k):
+        raise LLMRateLimitError("quota exhausted", retry_after=None)
+
+    monkeypatch.setattr(si, "ingest_corpus", boom)
+    await si.ingest_source(sid, session_maker=db_session_maker)
+
+    async with db_session_maker() as db:
+        row = await db.get(GroundingSource, sid)
+        assert row.status == "retrying"
+        assert row.retry_at is not None  # scheduled for a future daily-reset retry
+        assert row.attempts == 0  # a quota wait doesn't count toward the error cap
+
+
+async def test_generic_error_under_cap_retries(db_session_maker, monkeypatch):
+    from app.ingestion import source_ingest as si
+
+    sid = await _seed_claimed(db_session_maker, key="err", attempts=1)
+    monkeypatch.setattr(si, "loader_for_source", lambda src: _DummyLoader())
+
+    async def boom(*a, **k):
+        raise ValueError("clone failed")
+
+    monkeypatch.setattr(si, "ingest_corpus", boom)
+    await si.ingest_source(sid, session_maker=db_session_maker)
+
+    async with db_session_maker() as db:
+        row = await db.get(GroundingSource, sid)
+        assert row.status == "retrying"
+        assert row.retry_at is not None
+
+
+async def test_generic_error_at_cap_fails_terminally(db_session_maker, monkeypatch):
+    from app.ingestion import source_ingest as si
+
+    sid = await _seed_claimed(db_session_maker, key="dead", attempts=5)  # == source_max_error_attempts
+    monkeypatch.setattr(si, "loader_for_source", lambda src: _DummyLoader())
+
+    async def boom(*a, **k):
+        raise ValueError("still broken")
+
+    monkeypatch.setattr(si, "ingest_corpus", boom)
+    await si.ingest_source(sid, session_maker=db_session_maker)
+
+    async with db_session_maker() as db:
+        row = await db.get(GroundingSource, sid)
+        assert row.status == "failed"
+
+
+async def test_claim_picks_due_retry_not_future(db_session_maker):
+    from datetime import datetime, timedelta, timezone
+
+    from app.queue import claim_next_source
+
+    now = datetime.now(timezone.utc)
+    async with db_session_maker() as db:
+        due = GroundingSource(
+            kind="github", label="D", source_key="due", location=REPO,
+            status="retrying", retry_at=now - timedelta(minutes=1), license_ack=True,
+        )
+        future = GroundingSource(
+            kind="github", label="F", source_key="fut", location=REPO,
+            status="retrying", retry_at=now + timedelta(hours=1), license_ack=True,
+        )
+        db.add_all([due, future])
+        await db.commit()
+        due_id = due.id
+
+    async with db_session_maker() as db:
+        assert await claim_next_source(db) == due_id  # the due one
+    async with db_session_maker() as db:
+        assert await claim_next_source(db) is None  # the future one isn't eligible yet
+
+
 async def test_enqueue_source_sets_pending(db_session_maker):
     async with db_session_maker() as db:
         src = GroundingSource(

@@ -32,6 +32,16 @@ class LLMError(Exception):
     """LLM call failed or returned unusable output."""
 
 
+class LLMRateLimitError(LLMError):
+    """Rate-limited / quota-exhausted after exhausting in-call 429 retries. Callers can catch
+    this specifically to reschedule (e.g. wait for a free-tier daily reset). `retry_after` is
+    the provider's suggested wait in seconds, when it gives one."""
+
+    def __init__(self, message: str, *, retry_after: float | None = None):
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
 _T = TypeVar("_T")
 _MAX_RETRIES = 4  # free-tier providers (Gemini: 5 req/min/model) 429 readily; back off + retry
 
@@ -57,7 +67,14 @@ async def _create_with_retry(make_call: Callable[[], Awaitable[_T]]) -> _T:
             if attempt == _MAX_RETRIES - 1:
                 break
             await asyncio.sleep(_retry_after_seconds(exc, attempt))
-    raise LLMError(f"rate-limited after {_MAX_RETRIES} attempts: {last}")
+    suggested = None
+    if last is not None:
+        match = re.search(r"retryDelay['\"]?:\s*['\"]?(\d+)", str(last))
+        if match:
+            suggested = float(match.group(1))
+    raise LLMRateLimitError(
+        f"rate-limited after {_MAX_RETRIES} attempts: {last}", retry_after=suggested
+    )
 
 
 @lru_cache
