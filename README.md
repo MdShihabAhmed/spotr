@@ -28,17 +28,10 @@ it, and cites it inline during a session. Nothing is bundled, and nothing leaves
 
 ## Screenshots
 
-_Coming soon._
+![A Spotr session: the problem, the tutor chat, and the sealed hint ladder](docs/session.png)
 
-<!--
-  To add: run the app (npm run dev), capture these, and drop them in a docs/ folder:
-    docs/session.png   - the three-column session: statement, chat, and the sealed ladder
-    docs/ingest.png    - adding a problem, with the live pipeline
-    docs/sources.png   - the grounding sources page
-  Then replace the line above with, for example:
-    ![The session view](docs/session.png)
-  A short GIF of earning a rung is even better than a still.
--->
+The three-column session: the problem on the left, the tutor chat in the middle, and the hint
+ladder on the right. Sealed rungs are never placed in the model's prompt, so they cannot leak.
 
 ## Quickstart
 
