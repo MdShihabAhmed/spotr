@@ -10,7 +10,7 @@ from app.cache import close_redis
 from app.config import get_settings
 from app.database import engine
 from app.errors import ApiError
-from app.routers import auth, problems, tutor
+from app.routers import auth, grounding, problems, tutor
 from app.worker import run_worker
 
 
@@ -52,6 +52,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(problems.router)
 app.include_router(tutor.router)
+app.include_router(grounding.router)
 
 
 @app.exception_handler(ApiError)

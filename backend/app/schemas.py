@@ -197,3 +197,31 @@ class RevealOut(BaseModel):
 
 class MessageRequest(BaseModel):
     content: str = Field(min_length=1, max_length=4000)
+
+
+# --- Grounding sources (bring your own references) ---------------------------
+class GithubSourceCreate(BaseModel):
+    """Add a public GitHub repo as a grounding corpus. Markdown/text files under it are
+    chunked + embedded. `license_ack` is the on-page consent (self-hosted → user is admin)."""
+
+    label: str = Field(min_length=1, max_length=80)
+    repo_url: str = Field(min_length=1, max_length=512)
+    license_ack: bool = False
+
+
+class GroundingSourceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    kind: str  # "github" | "pdf"
+    label: str
+    source_key: str
+    location: str
+    status: str  # pending | cloning | embedding | ready | failed
+    error: str | None
+    chunk_count: int
+    created_at: datetime
+
+
+class GroundingSourceListOut(BaseModel):
+    items: list[GroundingSourceOut]

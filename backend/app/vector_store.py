@@ -82,6 +82,24 @@ async def upsert_chunks(
     )
 
 
+async def delete_source(client: AsyncQdrantClient, source: str, *, name: str | None = None) -> None:
+    """Remove every point belonging to `source` (payload filter). Used when a user deletes one
+    of their added grounding sources — the Postgres `GroundingChunk` rows are removed alongside.
+    Idempotent: deleting an absent source is a no-op."""
+    settings = get_settings()
+    collection = name or settings.grounding_collection
+    if not await client.collection_exists(collection):
+        return
+    await client.delete(
+        collection_name=collection,
+        points_selector=models.FilterSelector(
+            filter=models.Filter(
+                must=[models.FieldCondition(key="source", match=models.MatchValue(value=source))]
+            )
+        ),
+    )
+
+
 async def search(
     client: AsyncQdrantClient,
     query_vector: list[float],

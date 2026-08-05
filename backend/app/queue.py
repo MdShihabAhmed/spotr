@@ -30,14 +30,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.database import engine
-from app.models import Problem
+from app.models import GroundingSource, Problem
 
 # Postgres NOTIFY channels (hardcoded constants — never interpolate user input into LISTEN).
-INGEST_CHANNEL = "ingest_jobs"       # fired on enqueue → wakes an idle worker
+INGEST_CHANNEL = "ingest_jobs"       # fired on enqueue → wakes an idle worker (problems + sources)
 STATUS_CHANNEL = "problem_status"    # fired on every status change → feeds the SSE endpoint
+SOURCE_STATUS_CHANNEL = "source_status"  # grounding-source status changes → its SSE endpoint
 
 # The two claimed/in-flight states. `pending` waits to be claimed; `ready`/`failed` are terminal.
 IN_FLIGHT_STATES = ("normalizing", "generating_levels")
+# Grounding-source in-flight states (same durable-queue pattern; see GroundingSource).
+SOURCE_IN_FLIGHT_STATES = ("cloning", "embedding")
 
 
 # --- NOTIFY (best-effort) ----------------------------------------------------
@@ -57,6 +60,15 @@ async def notify_job_enqueued(problem_id: int) -> None:
 
 async def notify_problem_status(problem_id: int) -> None:
     await _emit(STATUS_CHANNEL, str(problem_id))
+
+
+async def notify_source_enqueued(source_id: int) -> None:
+    # Sources share the worker's wake channel, so an enqueued source wakes the same idle worker.
+    await _emit(INGEST_CHANNEL, f"source:{source_id}")
+
+
+async def notify_source_status(source_id: int) -> None:
+    await _emit(SOURCE_STATUS_CHANNEL, str(source_id))
 
 
 # --- LISTEN ------------------------------------------------------------------
@@ -148,3 +160,61 @@ async def recover_stuck_jobs(
         for problem in stuck:
             await notify_problem_status(problem.id)
     return [problem.id for problem in stuck]
+
+
+# --- grounding-source queue (same pattern, its own table) --------------------
+async def enqueue_source(db: AsyncSession, source: GroundingSource) -> None:
+    """Mark a grounding source `pending` for the worker; caller fires `notify_source_enqueued`."""
+    source.status = "pending"
+    source.error = None
+    source.claimed_at = None
+    await db.commit()
+
+
+async def claim_next_source(db: AsyncSession) -> int | None:
+    """Atomically claim one pending grounding source. Returns its id, or None if none pending."""
+    source = await db.scalar(
+        select(GroundingSource)
+        .where(GroundingSource.status == "pending")
+        .order_by(GroundingSource.id)
+        .limit(1)
+        .with_for_update(skip_locked=True)
+    )
+    if source is None:
+        return None
+    source.status = "cloning"  # first in-flight state
+    source.claimed_at = datetime.now(timezone.utc)
+    source.attempts += 1
+    await db.commit()
+    await notify_source_status(source.id)
+    return source.id
+
+
+async def recover_stuck_sources(
+    db: AsyncSession, *, stuck_timeout_seconds: int, max_attempts: int
+) -> list[int]:
+    """Re-queue (or fail) grounding sources whose worker died mid-ingest."""
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=stuck_timeout_seconds)
+    stuck = (
+        await db.scalars(
+            select(GroundingSource)
+            .where(
+                GroundingSource.status.in_(SOURCE_IN_FLIGHT_STATES),
+                GroundingSource.claimed_at.is_not(None),
+                GroundingSource.claimed_at < cutoff,
+            )
+            .with_for_update(skip_locked=True)
+        )
+    ).all()
+    for source in stuck:
+        if source.attempts >= max_attempts:
+            source.status = "failed"
+            source.error = "Ingestion didn't finish after several attempts. Remove and re-add to retry."
+        else:
+            source.status = "pending"
+            source.claimed_at = None
+    if stuck:
+        await db.commit()
+        for source in stuck:
+            await notify_source_status(source.id)
+    return [source.id for source in stuck]

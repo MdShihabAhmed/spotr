@@ -193,3 +193,35 @@ class GroundingChunk(Base):
     page: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Handbook page, if any
     content: Mapped[str] = mapped_column(Text)
     qdrant_point_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class GroundingSource(Base):
+    """A user-added grounding corpus — the "bring your own references" feature. Self-hosted,
+    so the user is the admin: they point Spotr at a public GitHub repo or upload a PDF, ack
+    that it runs on their machine + key, and a worker clones/parses/chunks/embeds it into the
+    same Qdrant collection as the built-in corpora. Its chunks are `GroundingChunk` rows keyed
+    on `source_key`, cited like any other.
+
+    The row IS the ingestion job (same durable-queue pattern as `Problem`): `status` walks
+    pending → cloning → embedding → ready/failed; `claimed_at`/`attempts` drive claim +
+    crash-recovery. Built-in corpora are NOT rows here — they're CLI-seeded — so this table is
+    exactly the user's own additions."""
+
+    __tablename__ = "grounding_sources"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16))  # "github" | "pdf"
+    label: Mapped[str] = mapped_column(String(80))  # human display name
+    # Stable identity used as GroundingChunk.source + the Qdrant payload `source` (so it's the
+    # retrieval filter key AND the citation label) + the point-id namespace. Slug of `label`,
+    # unique, ≤32 to fit GroundingChunk.source.
+    source_key: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    location: Mapped[str] = mapped_column(String(512))  # repo URL, or stored PDF path/name
+    status: Mapped[str] = mapped_column(String(24), default="pending", index=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+    license_ack: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Durable-queue bookkeeping (mirrors Problem): when a worker claimed it, and how many tries.
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)

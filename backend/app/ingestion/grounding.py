@@ -274,6 +274,121 @@ async def retrieve_grounding(
     return await search(client, vectors[0], limit=top_k, sources=sources)
 
 
+# --- user-provided sources (bring your own references) -----------------------
+# Files we chunk from a user's GitHub repo. Prose is section/paragraph-chunked; code files
+# become one chunk each (like PyRival). Everything else (images, binaries) is skipped.
+_PROSE_EXTS = {".md", ".markdown", ".txt", ".rst"}
+_CODE_EXTS = {".py", ".cpp", ".cc", ".cxx", ".h", ".hpp", ".java", ".kt", ".rs", ".go", ".js", ".ts", ".sql"}
+_SKIP_DIRS = {".git", "node_modules", "vendor", "dist", "build", "__pycache__", ".github"}
+_MAX_FILES = 4000  # a guard so a giant repo can't embed forever / exhaust the day's quota
+_MAX_FILE_BYTES = 512_000  # skip huge generated files
+_CHUNK_TARGET_CHARS = 1500  # greedy paragraph packing target for non-markdown prose
+
+
+def chunk_text(
+    text: str, *, source: str, title: str, url: str, page: int | None = None
+) -> list[RawChunk]:
+    """Chunk plain prose (non-markdown) by packing blank-line-separated paragraphs up to
+    ~`_CHUNK_TARGET_CHARS`. Used for `.txt`/`.rst` files and extracted PDF pages."""
+    text = text.strip()
+    if len(text) < _MIN_CHUNK_CHARS:
+        return []
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    chunks: list[RawChunk] = []
+    buf = ""
+    part = 1
+    for para in paragraphs:
+        if buf and len(buf) + len(para) + 2 > _CHUNK_TARGET_CHARS:
+            chunks.append(RawChunk(source=source, title=title, url=f"{url}#{part}", content=buf, page=page))
+            part += 1
+            buf = para
+        else:
+            buf = f"{buf}\n\n{para}" if buf else para
+    if len(buf) >= _MIN_CHUNK_CHARS:
+        chunks.append(RawChunk(source=source, title=title, url=f"{url}#{part}", content=buf, page=page))
+    return chunks
+
+
+def _github_blob_base(repo_url: str) -> str:
+    """`https://github.com/o/r(.git)` → `https://github.com/o/r/blob/HEAD` for file citations."""
+    return f"{repo_url.rstrip('/').removesuffix('.git')}/blob/HEAD"
+
+
+class UserGithubLoader(CorpusLoader):
+    """A user-added public GitHub repo. Prose (md/txt/rst) is section/paragraph-chunked; code
+    files become one chunk each. Cited by the file's GitHub blob URL."""
+
+    def __init__(self, *, source_key: str, repo_url: str):
+        self.source = source_key
+        self.repo = repo_url
+
+    def load(self, local: Path) -> Iterator[RawChunk]:
+        blob = _github_blob_base(self.repo)
+        seen = 0
+        for path in sorted(local.rglob("*")):
+            if seen >= _MAX_FILES:
+                break
+            if not path.is_file():
+                continue
+            rel_parts = path.relative_to(local).parts
+            if any(part in _SKIP_DIRS for part in rel_parts):
+                continue
+            ext = path.suffix.lower()
+            if ext not in _PROSE_EXTS and ext not in _CODE_EXTS:
+                continue
+            try:
+                if path.stat().st_size > _MAX_FILE_BYTES:
+                    continue
+                body = path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            seen += 1
+            rel = path.relative_to(local).as_posix()
+            url = f"{blob}/{rel}"
+            if ext in (".md", ".markdown"):
+                yield from chunk_markdown(body, source=self.source, url=url)
+            elif ext in _PROSE_EXTS:
+                yield from chunk_text(body, source=self.source, title=rel, url=url)
+            elif len(body.strip()) >= _MIN_CHUNK_CHARS:  # code: one chunk per file
+                yield RawChunk(source=self.source, title=rel, url=url, content=body.strip())
+
+
+class UserPdfLoader(CorpusLoader):
+    """A user-uploaded PDF, already stored at `location`. One chunk-set per page (cited with a
+    page number). `pypdf` is imported lazily so the rest of grounding works without it."""
+
+    def __init__(self, *, source_key: str, pdf_path: str, label: str):
+        self.source = source_key
+        self._path = Path(pdf_path)
+        self._label = label
+
+    def ensure_local(self) -> Path:
+        return self._path  # already on disk (uploaded); nothing to clone
+
+    def load(self, local: Path) -> Iterator[RawChunk]:
+        try:
+            from pypdf import PdfReader
+        except ImportError as exc:  # optional dep — surfaced as an actionable ingest error
+            raise RuntimeError(
+                "PDF grounding needs the 'pypdf' package. Install it with: uv add pypdf"
+            ) from exc
+        reader = PdfReader(str(self._path))
+        for i, pdf_page in enumerate(reader.pages, start=1):
+            text = (pdf_page.extract_text() or "").strip()
+            yield from chunk_text(
+                text, source=self.source, title=f"{self._label} — p.{i}", url=self._label, page=i
+            )
+
+
+def loader_for_source(src) -> CorpusLoader:
+    """Build the right loader for a `GroundingSource` row (kind → loader)."""
+    if src.kind == "github":
+        return UserGithubLoader(source_key=src.source_key, repo_url=src.location)
+    if src.kind == "pdf":
+        return UserPdfLoader(source_key=src.source_key, pdf_path=src.location, label=src.label)
+    raise ValueError(f"unknown grounding source kind: {src.kind}")
+
+
 # --- CLI ---------------------------------------------------------------------
 async def _run(sources: list[str], *, limit: int | None, reset: bool) -> None:
     for name in sources:

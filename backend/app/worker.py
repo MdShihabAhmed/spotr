@@ -25,14 +25,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.config import Settings, get_settings
 from app.database import async_session_maker
 from app.ingestion.pipeline import run_ingestion
+from app.ingestion.source_ingest import ingest_source
 from app.queue import (
     INGEST_CHANNEL,
     claim_next_job,
+    claim_next_source,
     pg_listen,
     recover_stuck_jobs,
+    recover_stuck_sources,
     wait_for_notification,
 )
-from app.models import Problem  # noqa: F401 — ensures mappers are configured before a claim
+from app.models import GroundingSource, Problem  # noqa: F401 — configure mappers before a claim
 
 logger = logging.getLogger("spotr.worker")
 
@@ -63,6 +66,30 @@ async def drain_queue(
         processed += 1
 
 
+async def drain_sources(
+    session_maker: async_sessionmaker[AsyncSession],
+    *,
+    process=ingest_source,
+    stuck_timeout_seconds: int,
+    max_attempts: int,
+) -> int:
+    """Recover crashed grounding-source jobs, then claim-and-process until none remain. Same
+    durable-queue shape as `drain_queue`, over the `grounding_sources` table."""
+    async with session_maker() as db:
+        await recover_stuck_sources(
+            db, stuck_timeout_seconds=stuck_timeout_seconds, max_attempts=max_attempts
+        )
+
+    processed = 0
+    while True:
+        async with session_maker() as db:
+            source_id = await claim_next_source(db)
+        if source_id is None:
+            return processed
+        await process(source_id, session_maker=session_maker)
+        processed += 1
+
+
 async def run_worker(
     *,
     session_maker: async_sessionmaker[AsyncSession] = async_session_maker,
@@ -87,6 +114,14 @@ async def run_worker(
                 )
                 if n:
                     logger.info("processed %d job(s)", n)
+                # Grounding sources share the wake channel, so drain them each pass too.
+                m = await drain_sources(
+                    session_maker,
+                    stuck_timeout_seconds=s.worker_stuck_timeout_seconds,
+                    max_attempts=s.worker_max_attempts,
+                )
+                if m:
+                    logger.info("processed %d grounding source(s)", m)
             except Exception:  # a bad pass must not kill the worker
                 logger.exception("worker pass failed; continuing")
             # Wait for a new-job notification; the poll timeout is the fallback that also
