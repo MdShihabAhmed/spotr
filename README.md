@@ -95,7 +95,7 @@ access and refresh tokens. Tests: pytest, with external services mocked so CI ne
 
 ## License
 
-The application code is open source under an MIT/Apache-style license. Sources you add (a repo
-or a PDF) are your responsibility: because Spotr is self-hosted you are the admin, and the
+The application code is open source under the MIT License (see `LICENSE`). Sources you add (a
+repo or a PDF) are your responsibility: because Spotr is self-hosted you are the admin, and the
 add-source form asks you to confirm you have the right to use what you add. Your sources are
 embedded into your own local Qdrant and never leave your machine.
