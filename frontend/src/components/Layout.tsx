@@ -13,7 +13,14 @@ export function Layout({ children }: { children: ReactNode }) {
     <>
       <header className="nav-bar">
         <Link to="/" className="nav-mark">
-          <span className="nav-glyph" aria-hidden />
+          <svg className="nav-glyph" viewBox="0 0 32 32" aria-hidden="true">
+            <rect x="7" y="4" width="2.4" height="24" fill="#6b6675" />
+            <rect x="22.6" y="4" width="2.4" height="24" fill="#6b6675" />
+            <rect x="7" y="5.6" width="18" height="2.8" fill="#6b6675" />
+            <rect x="7" y="12.1" width="18" height="2.8" fill="#6b6675" />
+            <rect x="7" y="18.6" width="18" height="2.8" fill="#34c46a" />
+            <rect x="7" y="25.1" width="18" height="2.8" fill="#57e089" />
+          </svg>
           <span className="nav-word">
             spot<em>r</em>
           </span>

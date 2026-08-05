@@ -129,10 +129,10 @@ p {
   margin-right: 22px;
 }
 .nav-glyph {
-  width: 13px;
-  height: 13px;
-  border: 1.5px solid oklch(0.62 0.014 258);
-  background: linear-gradient(to bottom, var(--earned-bright) 0 50%, transparent 50% 100%);
+  width: 15px;
+  height: 15px;
+  display: block;
+  flex-shrink: 0;
 }
 .nav-word {
   font-family: var(--mono);
