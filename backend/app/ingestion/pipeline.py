@@ -135,23 +135,23 @@ async def _ingest(
         await db.commit()
 
     # --- graduated ladder ----------------------------------------------------
-    # Needs an editorial to ground the levels. Without one the problem still reaches
-    # `ready` (statement + samples are usable) - levels get generated on a later
-    # re-ingest once an editorial link is supplied.
-    if problem.editorial_text:
-        problem.ingestion_status = "generating_levels"
-        await db.commit()
-        await notify_problem_status(problem.id)
-        try:
-            levels = await level_generator(problem)
-        except HintGenerationError as exc:
-            raise _IngestionFailed(f"Level generation failed: {exc}") from exc
+    # Generated from the statement + constraints, grounded by the editorial when one is
+    # available. Without an editorial the model reasons from the statement alone: still
+    # useful as a fallback, but lower confidence (it may infer an approach that isn't the
+    # intended one). We generate either way so every ready problem opens as a real session.
+    problem.ingestion_status = "generating_levels"
+    await db.commit()
+    await notify_problem_status(problem.id)
+    try:
+        levels = await level_generator(problem)
+    except HintGenerationError as exc:
+        raise _IngestionFailed(f"Level generation failed: {exc}") from exc
 
-        # Replace any prior levels so a re-ingest is idempotent, not additive.
-        await db.execute(delete(HintLevel).where(HintLevel.problem_id == problem.id))
-        for level, content in enumerate(levels, start=1):
-            db.add(HintLevel(problem_id=problem.id, level=level, content=content))
-        await db.commit()
+    # Replace any prior levels so a re-ingest is idempotent, not additive.
+    await db.execute(delete(HintLevel).where(HintLevel.problem_id == problem.id))
+    for level, content in enumerate(levels, start=1):
+        db.add(HintLevel(problem_id=problem.id, level=level, content=content))
+    await db.commit()
 
     problem.ingestion_status = "ready"
     problem.ingestion_error = None

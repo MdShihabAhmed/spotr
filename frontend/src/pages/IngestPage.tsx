@@ -73,6 +73,7 @@ export function IngestPage() {
   const [source] = useState("codeforces");
   const [url, setUrl] = useState("");
   const [editorialUrl, setEditorialUrl] = useState("");
+  const [editorialText, setEditorialText] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [text, setText] = useState("");
 
@@ -150,13 +151,14 @@ export function IngestPage() {
         time_limit_ms: limits.time_ms ?? undefined,
         memory_limit_mb: limits.mem_mb ?? undefined,
         editorial_url: editorialUrl.trim() || undefined,
+        editorial_text: editorialText.trim() || undefined,
       },
       { onSuccess: (p) => setSubmittedSlug(p.slug) },
     );
   }
 
   const canExtract = tab === "screenshot" ? images.length > 0 : text.trim().length > 0;
-  const canIngest = extracted || editorialUrl.trim().length > 0;
+  const canIngest = extracted || editorialUrl.trim().length > 0 || editorialText.trim().length > 0;
   const err = normalize.error ?? ingest.error;
   const message =
     err instanceof ApiError
@@ -250,6 +252,17 @@ export function IngestPage() {
                 placeholder="editorial link (optional)"
                 value={editorialUrl}
                 onChange={(e) => setEditorialUrl(e.target.value)}
+              />
+            </div>
+
+            <div className="field">
+              <label>Editorial text</label>
+              <textarea
+                className="input"
+                rows={4}
+                placeholder="paste the editorial here if there's no link (optional). With no editorial, the ladder is inferred from the statement alone."
+                value={editorialText}
+                onChange={(e) => setEditorialText(e.target.value)}
               />
             </div>
 

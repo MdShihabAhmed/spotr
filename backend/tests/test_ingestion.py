@@ -246,7 +246,9 @@ async def test_level_generation_failure_marks_ingestion_failed(db_session_maker)
         assert "level generation failed" in p.ingestion_error.lower()
 
 
-async def test_no_editorial_reaches_ready_without_levels(db_session_maker):
+async def test_no_editorial_generates_ladder_from_statement(db_session_maker):
+    # Fallback: with no editorial, the ladder is still generated from the statement +
+    # constraints, so every ready problem opens as a real session (lower confidence).
     pid = await _seed_pending(db_session_maker, statement_text="s", sample_tests=SAMPLE)
     source = _FakeSource(metadata=None)
 
@@ -260,7 +262,7 @@ async def test_no_editorial_reaches_ready_without_levels(db_session_maker):
     async with db_session_maker() as db:
         p = await db.get(Problem, pid)
         assert p.ingestion_status == "ready"
-    assert await _levels(db_session_maker, pid) == []  # no editorial -> no levels
+    assert len(await _levels(db_session_maker, pid)) == 4  # generated from the statement alone
 
 
 async def test_interactive_tag_from_api_sets_flag(db_session_maker):

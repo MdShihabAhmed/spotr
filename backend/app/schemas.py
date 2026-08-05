@@ -18,6 +18,15 @@ class UserOut(BaseModel):
     created_at: datetime
 
 
+class UserStats(BaseModel):
+    """Personal progress: rungs earned by your own reasoning vs opened manually."""
+
+    problems_started: int
+    levels_earned: int  # unlocked via chat (you demonstrated the idea)
+    levels_opened: int  # revealed manually
+    earned_ratio: float | None  # earned / (earned + opened); null if nothing unlocked yet
+
+
 class Token(BaseModel):
     access_token: str
     refresh_token: str

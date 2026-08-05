@@ -91,6 +91,16 @@ export type User = {
 
 export const getMe = () => api.get<User>("/me");
 
+/** Personal progress: rungs earned by your own reasoning vs opened manually. */
+export type UserStats = {
+  problems_started: number;
+  levels_earned: number;
+  levels_opened: number;
+  earned_ratio: number | null;
+};
+
+export const getMyStats = () => api.get<UserStats>("/me/stats");
+
 export const register = (email: string, password: string) =>
   api.post<User>("/register", { email, password });
 

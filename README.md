@@ -10,6 +10,8 @@ citations.
 
 You run it yourself with Docker and bring your own LLM key. Your data stays on your machine.
 
+> Status: work in progress. The core works end to end, and it is actively being built on.
+
 ## Why it's different
 
 The core idea is a hint ladder that physically cannot spoil. The tutor is only ever given the
@@ -23,6 +25,20 @@ problem gets a few rungs, a layered one gets more.
 
 Grounding is yours to control. Add a public GitHub repo or a PDF and Spotr chunks it, embeds
 it, and cites it inline during a session. Nothing is bundled, and nothing leaves your machine.
+
+## Screenshots
+
+_Coming soon._
+
+<!--
+  To add: run the app (npm run dev), capture these, and drop them in a docs/ folder:
+    docs/session.png   - the three-column session: statement, chat, and the sealed ladder
+    docs/ingest.png    - adding a problem, with the live pipeline
+    docs/sources.png   - the grounding sources page
+  Then replace the line above with, for example:
+    ![The session view](docs/session.png)
+  A short GIF of earning a rung is even better than a still.
+-->
 
 ## Quickstart
 

@@ -263,3 +263,35 @@ async def test_message_auto_unlocks_when_judge_demonstrates(
     earned = next(r for r in state["revealed"] if r["level"] == 1)
     assert earned["via"] == "chat"
     assert earned["earned_text"] == "the array is sorted so we can sweep from both ends"
+
+
+async def test_me_stats_earned_vs_opened(client, auth_headers, db_session_maker):
+    me = (await client.get("/me", headers=auth_headers)).json()
+    uid = me["id"]
+    async with db_session_maker() as db:
+        prob = Problem(slug="cf-stat", source="codeforces", external_id="STAT", ingestion_status="ready")
+        db.add(prob)
+        await db.commit()
+        await db.refresh(prob)
+        sess = TutorSession(user_id=uid, problem_id=prob.id)
+        db.add(sess)
+        await db.commit()
+        await db.refresh(sess)
+        db.add_all([
+            LevelUnlock(session_id=sess.id, level=1, via="chat"),
+            LevelUnlock(session_id=sess.id, level=2, via="chat"),
+            LevelUnlock(session_id=sess.id, level=3, via="manual"),
+        ])
+        await db.commit()
+
+    body = (await client.get("/me/stats", headers=auth_headers)).json()
+    assert body["levels_earned"] == 2
+    assert body["levels_opened"] == 1
+    assert body["problems_started"] == 1
+    assert abs(body["earned_ratio"] - 2 / 3) < 1e-6
+
+
+async def test_me_stats_empty_is_null_ratio(client, auth_headers):
+    body = (await client.get("/me/stats", headers=auth_headers)).json()
+    assert body["levels_earned"] == 0
+    assert body["earned_ratio"] is None

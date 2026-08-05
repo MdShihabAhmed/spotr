@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.auth import (
     REFRESH,
@@ -14,8 +14,8 @@ from app.auth import (
 )
 from app.dependencies import CurrentUser, DbSession
 from app.errors import ApiError
-from app.models import User
-from app.schemas import RefreshRequest, Token, UserCreate, UserOut
+from app.models import LevelUnlock, TutorSession, User
+from app.schemas import RefreshRequest, Token, UserCreate, UserOut, UserStats
 
 router = APIRouter(tags=["auth"])
 
@@ -65,3 +65,29 @@ async def refresh(payload: RefreshRequest, db: DbSession):
 @router.get("/me", response_model=UserOut)
 async def me(user: CurrentUser):
     return user
+
+
+@router.get("/me/stats", response_model=UserStats)
+async def my_stats(user: CurrentUser, db: DbSession):
+    """Personal progress: how many rungs this user earned by their own reasoning (chat) vs
+    opened manually, across all their sessions. The earned ratio is the motivating number -
+    the personal mirror of the system's no-leakage guarantee."""
+    rows = await db.execute(
+        select(LevelUnlock.via, func.count())
+        .join(TutorSession, TutorSession.id == LevelUnlock.session_id)
+        .where(TutorSession.user_id == user.id)
+        .group_by(LevelUnlock.via)
+    )
+    counts = {via: n for via, n in rows.all()}
+    earned = counts.get("chat", 0)
+    opened = counts.get("manual", 0)
+    total = earned + opened
+    sessions = await db.scalar(
+        select(func.count()).select_from(TutorSession).where(TutorSession.user_id == user.id)
+    )
+    return UserStats(
+        problems_started=sessions or 0,
+        levels_earned=earned,
+        levels_opened=opened,
+        earned_ratio=(earned / total) if total else None,
+    )
