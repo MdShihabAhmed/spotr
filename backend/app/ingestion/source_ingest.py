@@ -96,8 +96,20 @@ async def ingest_source(
         local = await asyncio.to_thread(loader.ensure_local)
         await _set_status(session_maker, source_id, "embedding")
 
+        # Push live progress (embedded / total) onto the row as each batch lands, so the UI
+        # can show a real fraction and ETA rather than a spinner.
+        async def _progress(done: int, total: int) -> None:
+            async with session_maker() as db:
+                row = await db.get(GroundingSource, source_id)
+                if row is not None:
+                    row.chunk_count = done
+                    row.chunks_total = total
+                    await db.commit()
+
         # loader.load(local) is a generator; ingest_corpus embeds + upserts, resumable.
-        await ingest_corpus(loader, session_maker=session_maker, chunks=loader.load(local))
+        await ingest_corpus(
+            loader, session_maker=session_maker, chunks=loader.load(local), on_progress=_progress
+        )
 
         async with session_maker() as db:
             total = await db.scalar(

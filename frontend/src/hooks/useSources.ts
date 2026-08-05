@@ -4,6 +4,7 @@ import {
   addPdfSource,
   deleteSource,
   listSources,
+  retrySource,
   type GroundingSource,
 } from "../lib/api";
 
@@ -52,6 +53,14 @@ export function useDeleteSource() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => deleteSource(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: sourcesKey }),
+  });
+}
+
+export function useRetrySource() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => retrySource(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: sourcesKey }),
   });
 }

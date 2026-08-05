@@ -1477,6 +1477,24 @@ p {
 .src-remove:hover:not(:disabled) {
   color: var(--bad);
 }
+.src-retry {
+  color: oklch(0.5 0.12 250);
+}
+.src-retry:hover:not(:disabled) {
+  color: oklch(0.42 0.14 250);
+}
+.src-bar {
+  flex-basis: 100%;
+  height: 3px;
+  background: var(--b-hair);
+  overflow: hidden;
+}
+.src-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--earned);
+  transition: width 0.4s ease;
+}
 .src-error {
   flex-basis: 100%;
   font-family: var(--mono);

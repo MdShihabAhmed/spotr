@@ -1,6 +1,12 @@
 import { useRef, useState } from "react";
 import { ApiError, type GroundingSource } from "../lib/api";
-import { useAddGithubSource, useAddPdfSource, useDeleteSource, useSources } from "../hooks/useSources";
+import {
+  useAddGithubSource,
+  useAddPdfSource,
+  useDeleteSource,
+  useRetrySource,
+  useSources,
+} from "../hooks/useSources";
 
 // The built-ins are CLI-seeded, not rows in the table — shown here for context, not managed.
 const BUILTINS = [
@@ -167,6 +173,10 @@ function Consent({ ack, setAck }: { ack: boolean; setAck: (v: boolean) => void }
 
 function SourceRow({ s }: { s: GroundingSource }) {
   const del = useDeleteSource();
+  const retry = useRetrySource();
+  const canRetry = s.status === "failed" || s.status === "retrying";
+  const pct = s.chunks_total > 0 ? Math.round((s.chunk_count / s.chunks_total) * 100) : null;
+
   return (
     <li className="src-row">
       <span className="src-label">
@@ -174,8 +184,18 @@ function SourceRow({ s }: { s: GroundingSource }) {
         <span className="src-kind">{s.kind}</span>
       </span>
       <span className="src-meta">
-        {s.chunk_count > 0 && <span className="src-count">{s.chunk_count} chunks</span>}
+        {s.status === "ready" && <span className="src-count">{s.chunk_count} chunks</span>}
+        {s.status !== "ready" && s.chunks_total > 0 && (
+          <span className="src-count">
+            {s.chunk_count} / {s.chunks_total}
+          </span>
+        )}
         <span className={`src-status src-status-${s.status}`}>{STATUS_TEXT[s.status]}</span>
+        {canRetry && (
+          <button className="src-remove src-retry" disabled={retry.isPending} onClick={() => retry.mutate(s.id)}>
+            retry now
+          </button>
+        )}
         <button
           className="src-remove"
           title="Remove this source"
@@ -185,6 +205,14 @@ function SourceRow({ s }: { s: GroundingSource }) {
           remove
         </button>
       </span>
+
+      {/* Live progress bar while embedding. */}
+      {s.status === "embedding" && pct != null && (
+        <span className="src-bar" aria-label={`${pct}% embedded`}>
+          <span className="src-bar-fill" style={{ width: `${pct}%` }} />
+        </span>
+      )}
+
       {s.status === "failed" && s.error && <span className="src-error">{s.error}</span>}
       {s.status === "retrying" && (
         <span className="src-error src-working">

@@ -373,13 +373,19 @@ export type GroundingSource = {
   location: string;
   status: GroundingSourceStatus;
   error: string | null;
-  chunk_count: number;
+  chunk_count: number; // embedded so far
+  chunks_total: number; // total to embed (0 = not known yet)
   created_at: string;
   // When a `retrying` source becomes eligible again (e.g. after the daily quota resets).
   retry_at: string | null;
 };
 
 export const listSources = () => api.get<{ items: GroundingSource[] }>("/grounding/sources");
+
+/** Retry now — skip a scheduled wait (network blip, or you've freed up quota). Resumes from
+ *  what's already embedded. */
+export const retrySource = (id: number) =>
+  api.post<GroundingSource>(`/grounding/sources/${id}/retry`);
 
 export const addGithubSource = (body: { label: string; repo_url: string; license_ack: boolean }) =>
   api.post<GroundingSource>("/grounding/sources/github", body);

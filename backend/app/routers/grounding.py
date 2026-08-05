@@ -135,6 +135,25 @@ async def add_pdf_source(
     return GroundingSourceOut.model_validate(src)
 
 
+@router.post("/sources/{source_id}/retry", response_model=GroundingSourceOut)
+async def retry_source(source_id: int, user: CurrentUser, db: DbSession, response: Response):
+    """Retry now — skip a scheduled wait. For a source that `failed` or is `retrying` (e.g. a
+    network blip, or you've freed up quota and don't want to wait for the daily reset). Re-queues
+    immediately with a fresh error-retry budget; ingestion resumes from what's already embedded."""
+    src = await db.get(GroundingSource, source_id)
+    if src is None:
+        raise ApiError(404, "source_not_found", "No grounding source with that id.")
+    if src.status in ("pending", "cloning", "embedding"):
+        raise ApiError(409, "already_active", "This source is already queued or processing.")
+
+    src.attempts = 0  # a manual retry gets the full backoff budget again
+    await enqueue_source(db, src)  # sets pending, clears error + retry_at, commits
+    await db.refresh(src)
+    await notify_source_enqueued(src.id)
+    response.status_code = 202
+    return GroundingSourceOut.model_validate(src)
+
+
 @router.get("/sources", response_model=GroundingSourceListOut)
 async def list_sources(user: CurrentUser, db: DbSession):
     rows = (

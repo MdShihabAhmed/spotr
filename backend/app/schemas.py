@@ -219,7 +219,8 @@ class GroundingSourceOut(BaseModel):
     location: str
     status: str  # pending | cloning | embedding | ready | failed | retrying
     error: str | None
-    chunk_count: int
+    chunk_count: int  # embedded so far
+    chunks_total: int  # total to embed (0 = not known yet)
     created_at: datetime
     retry_at: datetime | None = None
 

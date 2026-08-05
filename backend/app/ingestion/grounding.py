@@ -199,13 +199,15 @@ async def ingest_corpus(
     limit: int | None = None,
     reset: bool = False,
     chunks: Iterator[RawChunk] | None = None,
+    on_progress: Callable[[int, int], Awaitable[None]] | None = None,
 ) -> int:
     """Embed a corpus's chunks and upsert them to Qdrant + Postgres. Returns the number of
     chunks newly embedded. Resumable: already-present chunks are skipped unless `reset`.
 
     `chunks` lets callers/tests supply chunks directly (skipping the git clone + file
-    parse); otherwise the loader fetches and parses the corpus.
-    """
+    parse); otherwise the loader fetches and parses the corpus. `on_progress(done, total)` is
+    called once the total is known and after each embedded batch — the source pipeline uses it
+    to surface live progress (`done` counts already-embedded chunks from prior runs too)."""
     settings = get_settings()
     client = client or get_qdrant()
     batch_size = batch_size or settings.embedding_batch_size
@@ -233,6 +235,11 @@ async def ingest_corpus(
         if limit is not None and len(pending) >= limit:
             break
 
+    already = len(seen)  # chunks embedded on prior runs (resume)
+    total = already + len(pending)
+    if on_progress is not None:
+        await on_progress(already, total)  # so the total shows before the first batch lands
+
     embedded = 0
     for start in range(0, len(pending), batch_size):
         batch = pending[start : start + batch_size]
@@ -254,6 +261,8 @@ async def ingest_corpus(
                 )
             await db.commit()
         embedded += len(batch)
+        if on_progress is not None:
+            await on_progress(already + embedded, total)
     return embedded
 
 

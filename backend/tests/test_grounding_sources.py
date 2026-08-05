@@ -135,6 +135,46 @@ async def test_drain_sources_claims_and_processes(db_session_maker):
         assert (await db.get(GroundingSource, sid)).status == "ready"
 
 
+async def test_retry_failed_source_requeues(client, auth_headers, enqueued, db_session_maker):
+    async with db_session_maker() as db:
+        s = GroundingSource(
+            kind="github", label="F", source_key="fail1", location=REPO,
+            status="failed", error="boom", license_ack=True, attempts=5,
+        )
+        db.add(s)
+        await db.commit()
+        sid = s.id
+
+    r = await client.post(f"/grounding/sources/{sid}/retry", headers=auth_headers)
+    assert r.status_code == 202
+    assert r.json()["status"] == "pending"
+    assert enqueued == [sid]
+    async with db_session_maker() as db:
+        row = await db.get(GroundingSource, sid)
+        assert row.status == "pending"
+        assert row.error is None
+        assert row.attempts == 0  # fresh budget on manual retry
+
+
+async def test_retry_active_source_conflicts(client, auth_headers, enqueued, db_session_maker):
+    async with db_session_maker() as db:
+        s = GroundingSource(
+            kind="github", label="A", source_key="act1", location=REPO,
+            status="embedding", license_ack=True,
+        )
+        db.add(s)
+        await db.commit()
+        sid = s.id
+    r = await client.post(f"/grounding/sources/{sid}/retry", headers=auth_headers)
+    assert r.status_code == 409
+    assert enqueued == []
+
+
+async def test_retry_unknown_404(client, auth_headers):
+    r = await client.post("/grounding/sources/9999/retry", headers=auth_headers)
+    assert r.status_code == 404
+
+
 class _DummyLoader:
     source = "x"
 
@@ -212,6 +252,29 @@ async def test_generic_error_at_cap_fails_terminally(db_session_maker, monkeypat
     async with db_session_maker() as db:
         row = await db.get(GroundingSource, sid)
         assert row.status == "failed"
+
+
+async def test_progress_callback_updates_counts(db_session_maker, monkeypatch):
+    from app.ingestion import source_ingest as si
+
+    sid = await _seed_claimed(db_session_maker, key="prog", attempts=0)
+    monkeypatch.setattr(si, "loader_for_source", lambda src: _DummyLoader())
+
+    captured: dict[str, tuple[int, int]] = {}
+
+    async def fake_ingest(loader, *, session_maker, chunks, on_progress):
+        await on_progress(4, 10)  # mid-run: 4 of 10 embedded
+        async with session_maker() as db:
+            row = await db.get(GroundingSource, sid)
+            captured["mid"] = (row.chunk_count, row.chunks_total)
+        return 10
+
+    monkeypatch.setattr(si, "ingest_corpus", fake_ingest)
+    await si.ingest_source(sid, session_maker=db_session_maker)
+
+    assert captured["mid"] == (4, 10)  # progress was persisted live
+    async with db_session_maker() as db:
+        assert (await db.get(GroundingSource, sid)).status == "ready"
 
 
 async def test_claim_picks_due_retry_not_future(db_session_maker):
