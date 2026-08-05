@@ -1,17 +1,17 @@
-"""Tutor endpoints — the centerpiece: grounded Socratic chat with revealed-set disclosure.
+"""Tutor endpoints - the centerpiece: grounded Socratic chat with revealed-set disclosure.
 
-- `GET  /tutor/{slug}`          — session state: unlocked rungs (with content), history, status.
-- `POST /tutor/{slug}/reveal`   — manual SEQUENTIAL reveal (unlock max(revealed)+1; no skips).
-- `POST /tutor/{slug}/message`  — one chat turn, streamed as Server-Sent Events.
+- `GET  /tutor/{slug}`          - session state: unlocked rungs (with content), history, status.
+- `POST /tutor/{slug}/reveal`   - manual SEQUENTIAL reveal (unlock max(revealed)+1; no skips).
+- `POST /tutor/{slug}/message`  - one chat turn, streamed as Server-Sent Events.
 
 Disclosure is a revealed **set** in Postgres, reconstructed per request (no in-memory agent
-state). A turn: retrieve grounding → run the conservative judge (maybe auto-unlock the next
-rung the student demonstrably figured out) → stream a grounded, cited reply built ONLY from
-unlocked rungs. Un-revealed `HintLevel` content never enters the prompt — no-leakage by
+state). A turn: retrieve grounding -> run the conservative judge (maybe auto-unlock the next
+rung the student demonstrably figured out) -> stream a grounded, cited reply built ONLY from
+unlocked rungs. Un-revealed `HintLevel` content never enters the prompt - no-leakage by
 construction (see `agents/tutor.py`).
 
 The streaming turn opens its OWN DB session inside the generator (the request-scoped session
-is torn down when the response headers are sent, before the stream body runs) — same rule as
+is torn down when the response headers are sent, before the stream body runs) - same rule as
 the ingestion background task.
 """
 
@@ -57,7 +57,7 @@ async def _load_ready_problem(db: AsyncSession, slug: str) -> Problem:
         raise ApiError(
             409,
             "no_levels",
-            "This problem has no hint ladder yet — add the editorial link and re-ingest.",
+            "This problem has no hint ladder yet - add the editorial link and re-ingest.",
         )
     return problem
 
@@ -142,7 +142,7 @@ async def get_session(slug: str, user: CurrentUser, db: DbSession):
 
 @router.post("/{slug}/reveal", response_model=RevealOut)
 async def reveal(slug: str, user: CurrentUser, db: DbSession):
-    """Unlock the next rung sequentially. Rejects skips by construction — you can only ever
+    """Unlock the next rung sequentially. Rejects skips by construction - you can only ever
     unlock `max(revealed)+1`."""
     problem = await _load_ready_problem(db, slug)
     levels = await _levels_map(db, problem.id)
@@ -200,7 +200,7 @@ async def _stream_turn(*, user_id: int, problem_id: int, content: str) -> AsyncI
         await db.commit()
         await db.refresh(user_msg)  # need its id to attribute a chat unlock to this message
 
-        # 1) Grounding retrieval — enrichment, never required. Failure (e.g. unseeded
+        # 1) Grounding retrieval - enrichment, never required. Failure (e.g. unseeded
         #    corpus / no key) degrades to no citations rather than breaking the chat.
         try:
             hits = await retrieve_grounding(content)
@@ -209,7 +209,7 @@ async def _stream_turn(*, user_id: int, problem_id: int, content: str) -> AsyncI
         citations = [h.citation() for h in hits]
 
         # 2) Conservative disclosure judge on the NEXT rung only (sequential). Unlock just
-        #    that rung if the student demonstrably figured it out themselves — an "earned"
+        #    that rung if the student demonstrably figured it out themselves - an "earned"
         #    unlock, attributed to this message so the card can quote their words.
         nxt = (max(revealed) if revealed else 0) + 1
         unlocked: int | None = None

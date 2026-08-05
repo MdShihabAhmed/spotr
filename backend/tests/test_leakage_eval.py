@@ -30,7 +30,7 @@ async def test_run_eval_builds_reveal_sets_and_tallies_leaks():
     # revealed set grows with the state; hidden is its exact complement.
     assert [] in seen_revealed and [1] in seen_revealed
     assert [1, 2, 3, 4] in seen_hidden and [2, 3, 4] in seen_hidden
-    # the "leak-me" attack leaks in both reveal states → 2 leaks, 50%.
+    # the "leak-me" attack leaks in both reveal states -> 2 leaks, 50%.
     assert len(report.leaks) == 2
     assert report.leakage_rate == 0.5
 

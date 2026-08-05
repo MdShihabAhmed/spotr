@@ -8,7 +8,7 @@ export function AccountPage() {
     ["email", user.email],
     ["user id", user.id],
     ["member since", new Date(user.created_at).toLocaleDateString()],
-    ["codeforces handle", user.cf_handle ?? <span key="cf" className="muted">not linked</span>],
+    ["handle", user.cf_handle ?? <span key="cf" className="muted">not linked</span>],
   ];
 
   return (

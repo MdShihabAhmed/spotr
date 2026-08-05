@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getTutorSession, revealNextLevel } from "../lib/api";
 
-/** The tutor session for a problem (unlocked rungs, history, status). Static once loaded —
+/** The tutor session for a problem (unlocked rungs, history, status). Static once loaded -
  *  the chat turn streams outside React Query and updates local component state. */
 export function useTutorSession(slug: string | null) {
   return useQuery({

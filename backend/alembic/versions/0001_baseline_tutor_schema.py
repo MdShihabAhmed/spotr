@@ -1,4 +1,4 @@
-"""baseline schema — grounded Socratic tutor (six tables)
+"""baseline schema - grounded Socratic tutor (six tables)
 
 Fresh baseline after the 2026-07-27 re-architecture. Supersedes the old 7-table schema
 (problems keyed on cf_url, editorial_hints, hint_sessions, stress_test_runs, concept_notes).

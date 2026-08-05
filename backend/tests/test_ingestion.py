@@ -15,7 +15,7 @@ SAMPLE = [{"input": "4", "expected_output": "2 2"}]
 
 
 async def _fake_levels(problem):
-    """Stand-in for the LLM level generator — 4 valid graduated levels."""
+    """Stand-in for the LLM level generator - 4 valid graduated levels."""
     return [f"Level {i}: increasingly detailed guidance about the approach." for i in range(1, 5)]
 
 
@@ -202,7 +202,7 @@ async def test_editorial_fetch_error_is_surfaced_not_swallowed(db_session_maker)
 
 
 async def test_editorial_url_yielding_no_content_marks_failed(db_session_maker):
-    # A link that returns nothing (fetch → None) is a visible failure, not silent `ready`.
+    # A link that returns nothing (fetch -> None) is a visible failure, not silent `ready`.
     pid = await _seed_pending(
         db_session_maker,
         statement_text="s",
@@ -260,7 +260,7 @@ async def test_no_editorial_reaches_ready_without_levels(db_session_maker):
     async with db_session_maker() as db:
         p = await db.get(Problem, pid)
         assert p.ingestion_status == "ready"
-    assert await _levels(db_session_maker, pid) == []  # no editorial → no levels
+    assert await _levels(db_session_maker, pid) == []  # no editorial -> no levels
 
 
 async def test_interactive_tag_from_api_sets_flag(db_session_maker):

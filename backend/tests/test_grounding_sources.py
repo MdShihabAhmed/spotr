@@ -78,7 +78,7 @@ async def test_duplicate_labels_get_distinct_keys(client, auth_headers, enqueued
 
 
 async def test_delete_removes_chunks_and_row(client, auth_headers, enqueued, db_session_maker, monkeypatch):
-    # Don't dial Qdrant in a unit test — assert the Postgres side of the cleanup.
+    # Don't dial Qdrant in a unit test - assert the Postgres side of the cleanup.
     async def fake_delete(_client, _source, **_kw):
         return None
 

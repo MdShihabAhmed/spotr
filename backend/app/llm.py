@@ -3,9 +3,9 @@
 - **Provider-agnostic by design.** We use the OpenAI SDK, but point it at any
   OpenAI-compatible endpoint via `llm_base_url` (Google Gemini free tier by default,
   or Groq, OpenRouter, a local Ollama, or OpenAI itself). Switching providers is a
-  `.env` edit, not a code change — a deliberate "no vendor lock-in" decision.
+  `.env` edit, not a code change - a deliberate "no vendor lock-in" decision.
 - Model names come from config (`llm_model_strong` / `llm_model_fast`), never hardcoded.
-- **Langfuse tracing is wired here, from the first call** — but it's optional: when
+- **Langfuse tracing is wired here, from the first call** - but it's optional: when
   Langfuse keys are set we use its drop-in traced OpenAI client, otherwise a plain one.
   Tracing must never be a hard dependency, so any Langfuse setup failure degrades to the
   plain client rather than breaking the app.
@@ -79,7 +79,7 @@ async def _create_with_retry(make_call: Callable[[], Awaitable[_T]]) -> _T:
 
 @lru_cache
 def _client_for(base_url: str, api_key: str) -> AsyncOpenAI:
-    """One SDK client per (endpoint, key) — cached, since per-task routing may use several.
+    """One SDK client per (endpoint, key) - cached, since per-task routing may use several.
     `base_url=""` means the SDK default (OpenAI); any other value points the same SDK at an
     OpenAI-compatible provider (Gemini/Groq/Ollama/…)."""
     settings = get_settings()
@@ -128,7 +128,7 @@ async def complete_json(
     The task selects the provider/model (see `Settings.llm_profile`). `images` are `data:`
     URIs (base64) attached to the user message for multimodal calls (e.g. reading a problem
     screenshot). Raises `LLMError` if no key is configured, the call fails, or the output
-    isn't valid JSON — callers turn that into a clear failure, never a 500.
+    isn't valid JSON - callers turn that into a clear failure, never a 500.
     """
     client, model = _resolve(task)
 
@@ -195,7 +195,7 @@ async def embed_texts(texts: list[str], *, task: str = "embedding") -> list[list
 
     Used by grounding ingestion (embed corpus chunks) and the tutor (embed the query for
     retrieval). Raises `LLMError` so callers never surface a raw provider error. The model
-    is fixed per Qdrant collection — changing it means re-embedding everything, which is
+    is fixed per Qdrant collection - changing it means re-embedding everything, which is
     why the collection name encodes the model (see `Settings.grounding_collection`)."""
     if not texts:
         return []

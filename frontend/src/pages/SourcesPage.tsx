@@ -8,14 +8,6 @@ import {
   useSources,
 } from "../hooks/useSources";
 
-// The built-ins are CLI-seeded, not rows in the table — shown here for context, not managed.
-const BUILTINS = [
-  { label: "CP-Algorithms", note: "CC BY-SA 4.0" },
-  { label: "PyRival", note: "Apache-2.0" },
-  { label: "USACO Guide", note: "loader is an extension point" },
-  { label: "CP Handbook", note: "loader is an extension point" },
-];
-
 const STATUS_TEXT: Record<GroundingSource["status"], string> = {
   pending: "queued",
   cloning: "fetching…",
@@ -47,9 +39,8 @@ export function SourcesPage() {
     <div className="plain-page">
       <h1>Grounding sources</h1>
       <p className="lede">
-        Ground the tutor in references <em>you</em> trust — a public GitHub repo or a PDF. Each
-        gets chunked, embedded, and cited inline like the built-in corpora. It all stays on your
-        machine.
+        Ground the tutor in references <em>you</em> trust: a public GitHub repo or a PDF. Each one
+        gets chunked, embedded, and cited inline in your sessions. It all stays on your machine.
       </p>
 
       <div className="src-tabs">
@@ -67,7 +58,7 @@ export function SourcesPage() {
         Your sources
       </div>
       {isPending && <p className="muted">Loading…</p>}
-      {data && data.items.length === 0 && <p className="muted">None yet — add one above.</p>}
+      {data && data.items.length === 0 && <p className="muted">None yet - add one above.</p>}
       {data && data.items.length > 0 && (
         <ul className="src-list">
           {data.items.map((s) => (
@@ -75,18 +66,6 @@ export function SourcesPage() {
           ))}
         </ul>
       )}
-
-      <div className="section-label" style={{ marginTop: 36 }}>
-        Built-in corpora
-      </div>
-      <ul className="src-list src-builtins">
-        {BUILTINS.map((b) => (
-          <li key={b.label} className="src-row">
-            <span className="src-label">{b.label}</span>
-            <span className="src-meta">{b.note}</span>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
@@ -110,12 +89,12 @@ function GithubForm() {
       <div className="field">
         <label htmlFor="g-label">Name</label>
         <input id="g-label" className="input" value={label} required maxLength={80}
-          placeholder="My team's notes" onChange={(e) => setLabel(e.target.value)} />
+          placeholder="name for this source" onChange={(e) => setLabel(e.target.value)} />
       </div>
       <div className="field">
         <label htmlFor="g-url">Public GitHub repo</label>
         <input id="g-url" className="input" value={repoUrl} required
-          placeholder="https://github.com/owner/repo" onChange={(e) => setRepoUrl(e.target.value)} />
+          placeholder="https://github.com/…" onChange={(e) => setRepoUrl(e.target.value)} />
       </div>
       <Consent ack={ack} setAck={setAck} />
       {add.isError && <div className="error-box">{msg(add.error)}</div>}
@@ -147,7 +126,7 @@ function PdfForm() {
       <div className="field">
         <label htmlFor="p-label">Name</label>
         <input id="p-label" className="input" value={label} required maxLength={80}
-          placeholder="Competitive Programmer's Handbook" onChange={(e) => setLabel(e.target.value)} />
+          placeholder="name for this source" onChange={(e) => setLabel(e.target.value)} />
       </div>
       <div className="field">
         <label htmlFor="p-file">PDF file</label>
@@ -218,11 +197,11 @@ function SourceRow({ s }: { s: GroundingSource }) {
         <span className="src-error src-working">
           {s.retry_at ? `retries ${relTime(s.retry_at)}` : "will retry"}
           {s.chunk_count > 0 ? ` · resumes from ${s.chunk_count} embedded` : ""}
-          {s.error ? ` — ${s.error}` : ""}
+          {s.error ? ` - ${s.error}` : ""}
         </span>
       )}
       {ACTIVE.has(s.status) && (
-        <span className="src-error src-working">working — this can take a while on your key.</span>
+        <span className="src-error src-working">working - this can take a while on your key.</span>
       )}
     </li>
   );

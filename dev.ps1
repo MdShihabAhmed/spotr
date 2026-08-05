@@ -1,10 +1,10 @@
-# dev.ps1 — one-command local dev for Spotr on Windows.
+# dev.ps1 - one-command local dev for Spotr on Windows.
 #
 # Why this exists instead of honcho: honcho sits between you and uvicorn and
 # forwards stop signals badly on Windows (no real SIGKILL, no process-group
 # kill), so `uvicorn --reload`'s worker orphans and honcho spins forever on
 # "sending SIGKILL". Running each service in its OWN console means Ctrl+C goes
-# straight to that process — uvicorn's reloader then reaps its own worker
+# straight to that process - uvicorn's reloader then reaps its own worker
 # cleanly, the way it's designed to. `--reload` is still required on Windows
 # (psycopg needs the selector event loop, which --reload sets up).
 

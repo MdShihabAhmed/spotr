@@ -1,15 +1,15 @@
-"""Qdrant vector store — the semantic-retrieval half of grounding.
+"""Qdrant vector store - the semantic-retrieval half of grounding.
 
-Qdrant holds *only* the grounding corpora (CP-Algorithms / USACO Guide / CP Handbook /
-PyRival), chunked at section level with provenance in each point's payload. The tutor
-embeds a query and searches here to cite relevant reference passages. (Ladder hints are
-NOT here — they live in Postgres, gated by the revealed-set filter, not similarity.)
+Qdrant holds *only* the grounding sources the user added, chunked at section level with
+provenance in each point's payload. The tutor embeds a query and searches here to cite
+relevant passages. (Ladder hints are NOT here - they live in Postgres, gated by the
+revealed-set filter, not similarity.)
 
 The collection name encodes the embedding model (`Settings.grounding_collection`), so a
 model change is a different collection, never a silent mix of incompatible vectors.
 
 Everything takes an injectable `client`, and `AsyncQdrantClient(location=":memory:")`
-gives tests a real in-process Qdrant with no service — so retrieval logic is tested for
+gives tests a real in-process Qdrant with no service - so retrieval logic is tested for
 real, not mocked away.
 """
 
@@ -32,7 +32,7 @@ def get_qdrant() -> AsyncQdrantClient:
 
 @dataclass(frozen=True)
 class GroundingHit:
-    """One retrieved chunk with its provenance — everything a citation needs."""
+    """One retrieved chunk with its provenance - everything a citation needs."""
 
     source: str
     title: str
@@ -84,7 +84,7 @@ async def upsert_chunks(
 
 async def delete_source(client: AsyncQdrantClient, source: str, *, name: str | None = None) -> None:
     """Remove every point belonging to `source` (payload filter). Used when a user deletes one
-    of their added grounding sources — the Postgres `GroundingChunk` rows are removed alongside.
+    of their added grounding sources - the Postgres `GroundingChunk` rows are removed alongside.
     Idempotent: deleting an absent source is a no-op."""
     settings = get_settings()
     collection = name or settings.grounding_collection

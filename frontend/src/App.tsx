@@ -19,7 +19,7 @@ function Protected({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Public shell — the marketing landing is reachable signed-out; the nav adapts to auth. */
+/** Public shell - the marketing landing is reachable signed-out; the nav adapts to auth. */
 function Public({ children }: { children: React.ReactNode }) {
   return <Layout>{children}</Layout>;
 }

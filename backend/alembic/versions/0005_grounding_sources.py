@@ -1,9 +1,9 @@
 """grounding sources
 
-Adds `grounding_sources` — user-added grounding corpora ("bring your own references"): a
+Adds `grounding_sources` - user-added grounding corpora ("bring your own references"): a
 GitHub repo or an uploaded PDF the user points Spotr at, cloned/parsed/chunked/embedded into
 the same Qdrant collection as the built-in corpora. The row IS the ingestion job (durable
-queue, like `problems`): status pending → cloning → embedding → ready/failed, with
+queue, like `problems`): status pending -> cloning -> embedding -> ready/failed, with
 `claimed_at`/`attempts` for claim + crash recovery. See app/models.py `GroundingSource`.
 
 Revision ID: 0005_grounding_sources

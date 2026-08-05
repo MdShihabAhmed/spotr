@@ -1,4 +1,4 @@
-"""Smoke test for the LLM layer — confirms your key + base_url + model + structured
+"""Smoke test for the LLM layer - confirms your key + base_url + model + structured
 output all work, without running the whole ingestion pipeline.
 
 Run from backend/ with your .env in place:
@@ -20,7 +20,7 @@ async def main() -> None:
     s = get_settings()
     print(f"base_url : {s.llm_base_url or '(OpenAI default)'}")
     print(f"model    : {s.llm_model_strong}")
-    print(f"key set  : {'yes' if s.openai_api_key else 'NO — set OPENAI_API_KEY in .env'}")
+    print(f"key set  : {'yes' if s.openai_api_key else 'NO - set OPENAI_API_KEY in .env'}")
     print("-" * 40)
 
     try:
@@ -43,7 +43,7 @@ async def main() -> None:
         print(f"FAILED: {exc}")
         return
 
-    print(f"OK — provider returned valid structured JSON:\n{result}")
+    print(f"OK - provider returned valid structured JSON:\n{result}")
 
 
 if __name__ == "__main__":

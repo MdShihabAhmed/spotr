@@ -1,6 +1,6 @@
 """level unlocks
 
-Adds `level_unlocks` — how each ladder rung was unlocked (earned via chat vs opened
+Adds `level_unlocks` - how each ladder rung was unlocked (earned via chat vs opened
 manually), with the earned message for the unlock-card quote. `TutorSession.revealed_levels`
 stays the authority for *which* levels are unlocked; this table is the UX metadata behind the
 design's earned (green) / opened (violet) distinction. See app/models.py `LevelUnlock`.

@@ -2,7 +2,7 @@
 
 A `ProblemSource` knows how to (a) parse a problem's identity from a user-supplied URL
 and (b) fetch only the *permitted* extras (metadata + editorial) via that source's
-official API. It never scrapes restricted problem HTML — the user provides the
+official API. It never scrapes restricted problem HTML - the user provides the
 statement/constraints/samples.
 
 Codeforces is the only source implemented now; the registry + ABC exist so CSES /
@@ -61,7 +61,7 @@ class ProblemSource(ABC):
     async def fetch_editorial(self, editorial_url: str) -> str | None:
         """Editorial text via the source's permitted API. Raise `SourceError` (with a
         user-actionable reason) when a URL was supplied but no editorial could be
-        fetched — callers surface that instead of silently reaching `ready`."""
+        fetched - callers surface that instead of silently reaching `ready`."""
 
 
 _REGISTRY: dict[str, ProblemSource] = {}

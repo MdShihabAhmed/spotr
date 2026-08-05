@@ -1,11 +1,11 @@
 """Database models for the grounded Socratic tutor (six tables).
 
 The six-table schema:
-- `Problem` is **source-agnostic** — a `slug` ("{source}-{external_id}", e.g. "cf-1846C")
+- `Problem` is **source-agnostic** - a `slug` ("{source}-{external_id}", e.g. "cf-1846C")
   is the public/route id; `source` + `external_id` are the identity. Codeforces-specific
   bits live in `source_metadata` so the CF API path needs no re-parsing.
 - `HintLevel` is the fixed graduated ladder revealed from (renamed from EditorialHint).
-- `TutorSession.revealed_levels` is a disclosure **set**, not a `current_level` ceiling —
+- `TutorSession.revealed_levels` is a disclosure **set**, not a `current_level` ceiling -
   manual reveal fills it sequentially, chat unlocks single matched levels.
 - `GroundingChunk` is a section-level chunk of a reference corpus, with provenance.
 The old `StressTestRun` / `ConceptNote(topic unique)` shapes are gone (deferred / reworked).
@@ -60,7 +60,7 @@ class Problem(Base):
     tags: Mapped[list] = mapped_column(JSON, default=list)
     statement_text: Mapped[str] = mapped_column(Text, default="")
     constraints_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # list of {"input": str, "expected_output": str} — required to reach `ready`
+    # list of {"input": str, "expected_output": str} - required to reach `ready`
     sample_tests: Mapped[list] = mapped_column(JSON, default=list)
     # CF "Note": explains the sample cases, so it's shown AFTER the samples (not folded
     # into the statement). Kept as its own field for correct placement + rendering.
@@ -71,7 +71,7 @@ class Problem(Base):
     time_limit_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     memory_limit_mb: Mapped[int | None] = mapped_column(Integer, nullable=True)
     editorial_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    # Raw editorial — stored server-side, NEVER serialized to clients (spoiler guard).
+    # Raw editorial - stored server-side, NEVER serialized to clients (spoiler guard).
     editorial_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_interactive: Mapped[bool] = mapped_column(Boolean, default=False)
     has_multiple_answers: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -84,7 +84,7 @@ class Problem(Base):
     # When a worker claimed this job. Used for crash recovery: a row stuck in an in-flight
     # state past a timeout (worker died mid-job) is re-queued. NULL when not claimed.
     claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    # Claim count — caps retries so a job that crashes the worker every time eventually
+    # Claim count - caps retries so a job that crashes the worker every time eventually
     # lands in `failed` instead of re-queuing forever.
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -99,7 +99,7 @@ class Problem(Base):
 
 
 class HintLevel(Base):
-    """One rung of a problem's fixed graduated ladder (1–4). The conversation reveals
+    """One rung of a problem's fixed graduated ladder (1-4). The conversation reveals
     from these pre-authored texts, so nothing free-form is ever leaked."""
 
     __tablename__ = "hint_levels"
@@ -107,7 +107,7 @@ class HintLevel(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     problem_id: Mapped[int] = mapped_column(ForeignKey("problems.id"))
-    level: Mapped[int] = mapped_column(Integer)  # 1–4
+    level: Mapped[int] = mapped_column(Integer)  # 1-4
     content: Mapped[str] = mapped_column(Text)
 
     problem: Mapped["Problem"] = relationship(back_populates="levels")
@@ -120,7 +120,7 @@ class TutorSession(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     problem_id: Mapped[int] = mapped_column(ForeignKey("problems.id"))
-    # The disclosure SET, e.g. [1, 2] or [1, 3] — the levels the tutor may discuss.
+    # The disclosure SET, e.g. [1, 2] or [1, 3] - the levels the tutor may discuss.
     # Manual reveal fills it sequentially; a chat demonstration unlocks a single level.
     revealed_levels: Mapped[list] = mapped_column(JSON, default=list)
     # "active" | "solved" | "gave_up"
@@ -153,14 +153,14 @@ class SessionMessage(Base):
 
 
 class LevelUnlock(Base):
-    """How a ladder rung was unlocked — the metadata behind the design's "earned vs opened"
+    """How a ladder rung was unlocked - the metadata behind the design's "earned vs opened"
     distinction. `TutorSession.revealed_levels` stays the authority for *which* levels are
-    unlocked (and the only thing that gates content into the prompt — the no-leakage seam);
+    unlocked (and the only thing that gates content into the prompt - the no-leakage seam);
     this table records, per level, *how* it happened so the UI can render the right card:
 
     - `via="chat"` (earned, green): the disclosure judge matched the student's own reasoning.
       `earned_message_id` points at the user message the judge matched, so the unlock card can
-      quote their words back — and it survives a reload (the design's reward mechanism).
+      quote their words back - and it survives a reload (the design's reward mechanism).
     - `via="manual"` (opened, violet): the student revealed it sequentially; no earned message.
     """
 
@@ -181,30 +181,30 @@ class LevelUnlock(Base):
 
 
 class GroundingChunk(Base):
-    """A section-level chunk of a reference corpus (CP-Algorithms / USACO Guide /
-    CP Handbook / PyRival), embedded in Qdrant. Carries provenance for citations."""
+    """A section-level chunk of a grounding source, embedded in Qdrant. Carries provenance
+    (source, title, url, page) so the tutor can cite it."""
 
     __tablename__ = "grounding_chunks"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    source: Mapped[str] = mapped_column(String(32))  # "cp-algorithms" | "usaco-guide" | ...
+    source: Mapped[str] = mapped_column(String(32))  # the source_key of the GroundingSource
     title: Mapped[str] = mapped_column(String(255))  # section heading
     url: Mapped[str] = mapped_column(String(512))  # exact source URL / repo path
-    page: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Handbook page, if any
+    page: Mapped[int | None] = mapped_column(Integer, nullable=True)  # page number, if any
     content: Mapped[str] = mapped_column(Text)
     qdrant_point_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 class GroundingSource(Base):
-    """A user-added grounding corpus — the "bring your own references" feature. Self-hosted,
+    """A user-added grounding corpus - the "bring your own references" feature. Self-hosted,
     so the user is the admin: they point Spotr at a public GitHub repo or upload a PDF, ack
     that it runs on their machine + key, and a worker clones/parses/chunks/embeds it into the
     same Qdrant collection as the built-in corpora. Its chunks are `GroundingChunk` rows keyed
     on `source_key`, cited like any other.
 
     The row IS the ingestion job (same durable-queue pattern as `Problem`): `status` walks
-    pending → cloning → embedding → ready/failed; `claimed_at`/`attempts` drive claim +
-    crash-recovery. Built-in corpora are NOT rows here — they're CLI-seeded — so this table is
+    pending -> cloning -> embedding -> ready/failed; `claimed_at`/`attempts` drive claim +
+    crash-recovery. Built-in corpora are NOT rows here - they're CLI-seeded - so this table is
     exactly the user's own additions."""
 
     __tablename__ = "grounding_sources"
@@ -217,8 +217,8 @@ class GroundingSource(Base):
     # unique, ≤32 to fit GroundingChunk.source.
     source_key: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     location: Mapped[str] = mapped_column(String(512))  # repo URL, or stored PDF path/name
-    # Lifecycle: pending → cloning → embedding → ready | failed, plus `retrying` (a scheduled
-    # auto-retry — a rate-limit/quota hit waits ~24h for the daily reset, other errors back off
+    # Lifecycle: pending -> cloning -> embedding -> ready | failed, plus `retrying` (a scheduled
+    # auto-retry - a rate-limit/quota hit waits ~24h for the daily reset, other errors back off
     # briefly). A `retrying` row is re-claimed once `retry_at` passes.
     status: Mapped[str] = mapped_column(String(24), default="pending", index=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)

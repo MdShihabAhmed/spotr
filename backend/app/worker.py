@@ -1,10 +1,10 @@
 """The ingestion worker: claims durable jobs from Postgres and runs the pipeline.
 
 Runs two ways:
-- **Inline** in the API process (dev convenience) when `RUN_INLINE_WORKER=true` — `main.py`
+- **Inline** in the API process (dev convenience) when `RUN_INLINE_WORKER=true` - `main.py`
   starts `run_worker` as a background task on startup.
 - **Standalone** as its own container (`python -m app.worker`) in the compose stack, with
-  `RUN_INLINE_WORKER=false` on the API — one fewer thing sharing the web process, and you can
+  `RUN_INLINE_WORKER=false` on the API - one fewer thing sharing the web process, and you can
   scale workers independently. Multiple workers are safe: `FOR UPDATE SKIP LOCKED` guarantees
   no two claim the same job.
 
@@ -35,7 +35,7 @@ from app.queue import (
     recover_stuck_sources,
     wait_for_notification,
 )
-from app.models import GroundingSource, Problem  # noqa: F401 — configure mappers before a claim
+from app.models import GroundingSource, Problem  # noqa: F401 - configure mappers before a claim
 
 logger = logging.getLogger("spotr.worker")
 
@@ -61,7 +61,7 @@ async def drain_queue(
             problem_id = await claim_next_job(db)
         if problem_id is None:
             return processed
-        # run_ingestion opens its own session and never raises (failures → status=failed).
+        # run_ingestion opens its own session and never raises (failures -> status=failed).
         await process(problem_id, session_maker=session_maker)
         processed += 1
 

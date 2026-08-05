@@ -36,7 +36,7 @@ export function useProblemList(page: number, pageSize = 20) {
 
 /**
  * Fetch one problem by slug and keep it live while ingestion runs. Updates are pushed over
- * SSE (the backend LISTENs on Postgres and streams each status change) — no polling. If the
+ * SSE (the backend LISTENs on Postgres and streams each status change) - no polling. If the
  * stream can't be opened (proxy buffering, transient failure), we fall back to a slow poll so
  * status still converges.
  */

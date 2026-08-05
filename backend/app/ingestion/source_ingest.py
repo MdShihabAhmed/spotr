@@ -1,7 +1,7 @@
-"""Process one user-added grounding source: clone/parse → chunk → embed → Qdrant.
+"""Process one user-added grounding source: clone/parse -> chunk -> embed -> Qdrant.
 
 The worker calls `ingest_source(source_id)` for each claimed `GroundingSource` row. Like the
-problem pipeline, it opens its OWN sessions and NEVER raises — every failure lands as
+problem pipeline, it opens its OWN sessions and NEVER raises - every failure lands as
 `status="failed"` + an actionable `error`, and each transition fires a NOTIFY so the SSE
 status endpoint pushes progress. Reuses the corpus embed/upsert machinery in
 `ingestion.grounding` (idempotent + resumable, so a rate-limited run continues on retry).
@@ -92,7 +92,7 @@ async def ingest_source(
         source_key = src.source_key
 
     try:
-        # Cloning a repo (or locating an uploaded PDF) is blocking — keep it off the event loop.
+        # Cloning a repo (or locating an uploaded PDF) is blocking - keep it off the event loop.
         local = await asyncio.to_thread(loader.ensure_local)
         await _set_status(session_maker, source_id, "embedding")
 
@@ -119,7 +119,7 @@ async def ingest_source(
             )
         await _set_status(session_maker, source_id, "ready", error="", chunk_count=total or 0)
     except LLMRateLimitError as exc:
-        # Quota/rate-limit during embedding — not a bad job, just out of budget. Reschedule far
+        # Quota/rate-limit during embedding - not a bad job, just out of budget. Reschedule far
         # out (free-tier daily reset) and don't count it toward the error-retry cap. Already-
         # embedded chunks are saved, so the retry resumes rather than restarting.
         settings = get_settings()
@@ -128,10 +128,10 @@ async def ingest_source(
             session_maker,
             source_id,
             delay_seconds=settings.source_ratelimit_retry_seconds,
-            error=f"Embedding hit the rate limit / daily quota — will retry automatically once it resets. ({exc})",
+            error=f"Embedding hit the rate limit / daily quota - will retry automatically once it resets. ({exc})",
             reset_attempts=True,
         )
-    except Exception as exc:  # noqa: BLE001 — any other failure: back off a few times, then fail
+    except Exception as exc:  # noqa: BLE001 - any other failure: back off a few times, then fail
         logger.exception("grounding source %s failed", source_id)
         settings = get_settings()
         async with session_maker() as db:
@@ -148,5 +148,5 @@ async def ingest_source(
                 session_maker,
                 source_id,
                 delay_seconds=settings.source_error_retry_seconds,
-                error=f"{detail} — will retry automatically (attempt {attempts}).",
+                error=f"{detail} - will retry automatically (attempt {attempts}).",
             )

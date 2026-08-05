@@ -1,4 +1,4 @@
-"""Codeforces problem source — permitted API only (no HTML scraping).
+"""Codeforces problem source - permitted API only (no HTML scraping).
 
 Folds together the former `cf_url` (URL identity parsing), `cf_client` (metadata via
 `problemset.problems`, Redis-cached + throttled), and `editorial_scraper` (editorial via
@@ -96,7 +96,7 @@ class CodeforcesSource(ProblemSource):
 
     async def fetch_editorial(self, editorial_url: str) -> str:
         """Editorial text via `blogEntry.view`. Raises `SourceError` (with a
-        user-actionable reason) on every failure path — a swallowed `None` here would
+        user-actionable reason) on every failure path - a swallowed `None` here would
         surface downstream as an unexplained "no editorial captured"."""
         blog_id = parse_blog_id(editorial_url)
         if blog_id is None:

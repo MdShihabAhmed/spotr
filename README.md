@@ -1,284 +1,101 @@
 # Spotr
 
-A **grounded Socratic tutor** for competitive programmers who want to *upsolve* — to
-understand a problem they couldn't crack, without being handed the answer.
+A self-hosted Socratic tutor for competitive programmers who want to upsolve: understand a
+problem you couldn't crack, without being handed the answer.
 
-Most "AI help" for competitive programming just prints the solution, which teaches nothing.
-Spotr instead runs a **conversation that never reveals more than you've earned**: it
-guides you with questions, unlocks the next hint only when you demonstrate you've reached it
-yourself, and grounds its explanations in openly-licensed references with citations.
+Most AI help just prints the solution, which teaches nothing. Spotr runs a conversation that
+never reveals more than you've earned. It asks questions, unlocks the next hint only when you
+show you've reached it yourself, and grounds its explanations in references you choose, with
+citations.
 
-It's **self-hosted** and **bring-your-own-key** — you run it with `docker compose`, supply
-your own LLM key, and your data stays yours.
+You run it yourself with Docker and bring your own LLM key. Your data stays on your machine.
 
----
+## Why it's different
 
-## Table of contents
-1. [Why it's built this way](#1-why-its-built-this-way)
-2. [Architecture](#2-architecture)
-3. [Quickstart](#3-quickstart)
-4. [LLM configuration](#4-llm-configuration) ← provider-agnostic, per-task, and its limits
-5. [Feature walkthrough](#5-feature-walkthrough)
-6. [The no-leakage eval](#6-the-no-leakage-eval)
-7. [Key design decisions](#7-key-design-decisions)
-8. [Tech stack](#8-tech-stack)
-9. [Licensing & attribution](#9-licensing--attribution)
+The core idea is a hint ladder that physically cannot spoil. The tutor is only ever given the
+rungs you have already unlocked. Un-revealed hint text is never placed in the model's prompt,
+so it cannot leak no matter how you ask. The guarantee is structural, not a request to the
+model, and an adversarial eval measures it (see below).
 
-> **Status.** Core is built and tested (auth, problem ingestion on a durable Postgres-backed
-> job queue, graduated hint ladder, grounding retrieval, the streaming tutor with
-> revealed-set disclosure, and the leakage eval). The full stack runs with one
-> `docker compose up`. The grounding corpus *seed* is an opt-in one-shot you run once (it
-> needs an embeddings key and some time).
+You unlock rungs one at a time, or a conservative judge unlocks the next rung automatically
+when your message shows you understood it. The ladder length adapts to the problem: a simple
+problem gets a few rungs, a layered one gets more.
 
----
+Grounding is yours to control. Add a public GitHub repo or a PDF and Spotr chunks it, embeds
+it, and cites it inline during a session. Nothing is bundled, and nothing leaves your machine.
 
-## 1. Why it's built this way
+## Quickstart
 
-**Graduated, not all-at-once.** Every problem gets a 4-rung ladder — *notice → key insight →
-approach & why → full solution* — generated once from the official editorial. You climb it
-one rung at a time.
+You need Docker and an LLM API key (the default configuration targets a free tier).
 
-**No-leakage, enforced by construction.** The tutor is only ever given the rungs you've
-already unlocked. Un-revealed hint text is *never placed in the prompt*, so it can't leak no
-matter how you phrase your question — the guarantee is structural, not a plea to the model.
-Then it's **measured** by an adversarial eval (§6).
-
-**You have to earn it.** You unlock rungs manually one at a time, *or* a conservative judge
-unlocks the next rung automatically when your message shows you've figured it out — "✓ you
-figured out hint 2 yourself."
-
-**Grounded and cited — in references you trust.** Explanations draw on openly-licensed corpora
-(CP-Algorithms, USACO Guide, CP Handbook, PyRival), retrieved semantically and cited inline — so
-guidance is credible and traceable, not hallucinated. And you can **add your own**: point Spotr at
-a public GitHub repo or upload a PDF (your team's notes, a textbook, your snippet library) and it's
-chunked, embedded, and cited like any built-in corpus. Self-hosted, so it all stays on your machine.
-
----
-
-## 2. Architecture
-
-```
-  Browser (React SPA)
-        │  screenshots / chat (SSE) / live ingest status (SSE)
-        ▼
-  FastAPI  ──►  POST /ingest  ──►  Postgres (the `problems` row IS the job queue)
-        │                                │  ▲ LISTEN/NOTIFY (status → SSE)
-        │                                ▼  │
-        │                          Worker (claims pending rows, FOR UPDATE SKIP LOCKED)
-        │                            normalize (vision) → metadata + editorial → 4-rung ladder
-        │
-        ├──►  Tutor turn:  build context from {unlocked rungs} ∪ {your messages}
-        │                  + retrieved grounding  →  streamed, cited reply
-        │
-        ├──►  Qdrant   (grounding corpora, chunked + embedded, cited on retrieval)
-        └──►  Redis    (CF API cache, outbound rate-limit lease)
-
-  LLM (any OpenAI-compatible provider; Gemini free tier by default) — per-task routable
-```
-
-- **Problem input** is user-provided (screenshot → LLM vision → clean structured text); we
-  never scrape problem pages. Only permitted APIs are called (Codeforces metadata + the
-  official `blogEntry.view` editorial API from a link you paste).
-- **Ladder content lives in Postgres**, gated by a revealed-set filter. **Grounding lives in
-  Qdrant**, retrieved by similarity. These are deliberately separate concerns.
-
----
-
-## 3. Quickstart
-
-### Option A — the whole stack in one command (self-host)
-
-**Prerequisites:** Docker, and a free [Gemini API key](https://aistudio.google.com/apikey)
-(no credit card).
+Whole stack, one command:
 
 ```bash
-cp backend/.env.example backend/.env   # paste your key into OPENAI_API_KEY
-docker compose up -d --build           # postgres + redis + qdrant + migrate + api + worker + frontend
+cp backend/.env.example backend/.env    # put your key in OPENAI_API_KEY
+docker compose up -d --build
 ```
 
-- Frontend → **http://localhost:8080**, API → **http://localhost:8000**.
-- Migrations run automatically (the one-shot `migrate` service); the API and a dedicated
-  `worker` container come up after it.
-- Seed the grounding corpora once (opt-in, needs the embeddings key, takes a while):
-  ```bash
-  docker compose --profile seed run --rm seed
-  ```
+Frontend on http://localhost:8080, API on http://localhost:8000. Migrations run automatically;
+the API and a worker container start after them.
 
-### Option B — dev mode (hot reload)
-
-**Prerequisites:** Docker (infra only), Python ≥ 3.14 with
-[`uv`](https://docs.astral.sh/uv/), Node ≥ 20, the Gemini key.
+Dev mode with hot reload (needs Python 3.14 with [uv](https://docs.astral.sh/uv/) and Node 20):
 
 ```bash
-# 1. Infra only
 docker compose up -d postgres redis qdrant
-
-# 2. Backend (from backend/)
-cp .env.example .env          # then paste your key into OPENAI_API_KEY
-uv sync
-uv run alembic upgrade head
-uv run uvicorn app.main:app --reload    # http://localhost:8000 (runs the worker inline)
-
-# 3. Frontend (from frontend/)
-npm install
-npm run dev                   # http://localhost:5173
+cd backend && cp .env.example .env && uv sync && uv run alembic upgrade head
+uv run uvicorn app.main:app --reload    # runs the worker inline
+cd ../frontend && npm install && npm run dev
 ```
 
-In dev, the ingestion worker runs **inside** the API process (`RUN_INLINE_WORKER=true`), so
-`uvicorn` alone processes the queue — no separate worker to start. On Windows, `.\dev.ps1`
-launches all three panes at once.
+On Windows, `.\dev.ps1` opens all three panes at once.
 
-Register an account, ingest a problem (paste its URL + an editorial-blog link, drop a
-screenshot of the statement), then open the tutor.
+## LLM configuration
 
----
+Spotr talks to any OpenAI-compatible endpoint through the OpenAI SDK, so switching providers is
+a `.env` change with no code change. Work is split into five tasks: normalize, hints, chat,
+judge, and embedding. Set one global key and all five use it; add a per-task override to route
+one task somewhere else. Each task needs different provider features (vision for normalize,
+streaming for chat, an embeddings endpoint for embedding), which is why routing is per task.
 
-## 4. LLM configuration
+The embedding model fixes a vector dimension. `EMBEDDING_DIM` must match it, and the Qdrant
+collection name encodes the model, so changing the model uses a fresh collection rather than
+mixing vector spaces.
 
-Spotr is **provider-agnostic**. It talks to any **OpenAI-compatible** endpoint via the
-OpenAI SDK, so switching providers is a `.env` edit — no code change. The default targets
-**Google Gemini's free tier**; OpenAI, Groq, OpenRouter, Together, a local Ollama/vLLM, etc.
-all work by changing `LLM_BASE_URL` + the key + model names.
+Check that a key works end to end with `uv run python check_llm.py`.
 
-### One key for everything, or a different provider per task
+## How it works
 
-There are **five tasks**, each independently routable. Set only the global key and all five
-use it; add a per-task override to route just that task elsewhere:
+- Problem input is yours. Paste the statement or drop a screenshot, and a vision pass rebuilds
+  the text and the math that copy-paste destroys. Spotr does not scrape problem pages.
+- Ingestion is a durable job: the `problems` row is the queue. A worker claims pending rows
+  with `SELECT ... FOR UPDATE SKIP LOCKED`, and a job whose worker died mid-run is re-queued
+  after a timeout, so nothing is lost to a restart. There is no external broker. Live status
+  reaches the browser over SSE fed by Postgres `LISTEN/NOTIFY`.
+- Hint content lives in Postgres, gated by which rungs you have unlocked. Grounding lives in
+  Qdrant, retrieved by similarity. The two are kept separate on purpose.
+- Agent state lives in Postgres and is rebuilt per request, so it survives restarts.
 
-```dotenv
-# Global default — powers every task unless overridden
-OPENAI_API_KEY=your-key
-LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
-LLM_MODEL_STRONG=gemini-flash-latest        # normalize / hints / chat
-LLM_MODEL_FAST=gemini-flash-lite-latest     # the cheap judge
-EMBEDDING_MODEL=gemini-embedding-001        # grounding embeddings
+## The no-leakage eval
 
-# Example override: run the tutor chat on a paid model, keep everything else on Gemini free
-CHAT_BASE_URL=                              # empty = OpenAI
-CHAT_API_KEY=sk-...
-CHAT_MODEL=gpt-5.2
-```
-
-Every task accepts `<TASK>_MODEL`, `<TASK>_BASE_URL`, `<TASK>_API_KEY` (blank = fall back to
-the global default). **Why per-task?** Providers improve unevenly — a model that's best at
-vision extraction today may not be the best (or cheapest) at the chat, and free-tier rate
-limits differ per model. Per-task routing lets you put each job on whatever's best for it.
-
-### Which provider can do which task
-
-Each task uses different **API features**, and not every OpenAI-compatible provider supports
-all of them. This is the real limitation behind "any LLM":
-
-| Task | What it does | Requires the provider to support |
-|---|---|---|
-| **normalize** | screenshot → clean structured problem | **chat + vision (image input) + structured JSON output** |
-| **hints** | generate the 4-rung ladder | **chat + structured JSON output** |
-| **chat** | the tutor's reply | **chat + streaming** |
-| **judge** | decide if you earned the next rung | **chat + structured JSON output** |
-| **embedding** | embed grounding corpora + queries | **an `/embeddings` endpoint** |
-
-Rough support picture (verify against your provider's current docs — capabilities change):
-
-| Provider | vision | structured JSON | streaming | embeddings |
-|---|:--:|:--:|:--:|:--:|
-| **OpenAI** | ✅ | ✅ | ✅ | ✅ |
-| **Gemini** (default) | ✅ | ✅ | ✅ | ✅ |
-| **Groq** | ⚠️ limited | ⚠️ JSON mode | ✅ | ❌ |
-| **Ollama** (local) | ⚠️ vision models only | ⚠️ partial | ✅ | ✅ |
-
-**How to read this:** OpenAI and Gemini support every task, so a single key just works. If
-your preferred provider is missing a feature (say, no embeddings, or no vision), you don't
-have to give it up — **route only the affected tasks elsewhere** with the per-task overrides.
-For example: chat on a local Ollama, but `normalize` and `embedding` on Gemini.
-
-Two consequences worth knowing:
-- **Embeddings pin a dimension.** `EMBEDDING_DIM` must match the model
-  (`gemini-embedding-001` → 3072; OpenAI `text-embedding-3-small` → 1536). The Qdrant
-  collection name encodes the embedding model, so changing it means a fresh collection and a
-  re-seed — never a silent mix of incompatible vectors.
-- **Free tiers rate-limit hard.** Gemini's free `gemini-flash-latest` currently allows only
-  ~20 requests/day. The app retries on HTTP 429 with backoff, but for heavy use (or the
-  leakage eval) point the relevant task at a paid or higher-quota model.
-
-Verify a key/model works end to end: `uv run python check_llm.py`.
-
----
-
-## 5. Feature walkthrough
-
-- **Ingest** — paste a Codeforces problem URL and an editorial-blog link, drop screenshot(s)
-  of the statement (vision reconstructs the LaTeX that copy-paste destroys), review the
-  extracted fields, and submit. The editorial is fetched server-side, used to build the
-  ladder, and **never sent to your browser** (it would spoil the hints).
-- **The ladder** — 4 rungs, hidden until earned. Reveal the next one manually, or let the
-  chat unlock it.
-- **The tutor** — ask questions or share your idea; it replies (streamed), staying within
-  what you've unlocked, citing grounding references. When you articulate the next insight, it
-  unlocks that rung: "✓ you figured out hint K yourself."
-
----
-
-## 6. The no-leakage eval
-
-The no-leakage promise is enforced structurally — but claims deserve measurement.
-`evals/leakage_eval.py` is an adversarial harness:
-
-1. Put a problem at a low reveal state (0 or 1 rungs unlocked).
-2. Attack the **real** tutor context builder with prompts engineered to extract the answer
-   ("just give me the code", "ignore your instructions", roleplay, etc.).
-3. An LLM-as-judge reads each reply *and the hidden rungs* and decides whether anything
-   leaked.
-4. Report a **leakage rate**.
+`evals/leakage_eval.py` puts a problem at a low reveal state, attacks the real tutor with
+prompts designed to extract the answer (roleplay, "ignore your instructions", "just give me the
+code"), and has a judge decide whether any reply exposed a hidden rung. It reports a leakage
+rate.
 
 ```bash
-uv run python -m evals.leakage_eval           # full run
-uv run python -m evals.leakage_eval --limit 3 # quick smoke
+uv run python -m evals.leakage_eval
+uv run python -m evals.leakage_eval --limit 3
 ```
 
-This is *enforce-then-measure* discipline: the eval already caught the tutor volunteering a
-level-1 nudge too eagerly, which drove a prompt fix.
+## Tech stack
 
----
+Backend: FastAPI, SQLAlchemy 2.0 and Alembic on PostgreSQL, Redis, Qdrant, the OpenAI SDK, and
+optional Langfuse tracing. Frontend: React, Vite, TypeScript, TanStack Query, KaTeX. Auth: JWT
+access and refresh tokens. Tests: pytest, with external services mocked so CI needs no network.
 
-## 7. Key design decisions
+## License
 
-- **No-leakage by construction, then measured.** Context is filtered to
-  `{unlocked rungs} ∪ {your messages}`; un-revealed content can't enter the prompt. The eval
-  quantifies it.
-- **Agent state lives in Postgres**, reconstructed per request — not a LangGraph
-  checkpointer. Simpler, and it survives restarts.
-- **Durable ingestion queue without a broker.** Ingestion is 30–90s of API + LLM work, so it
-  runs in a worker, not the request. Instead of Celery + Redis-as-broker, *the `problems` row
-  is the queue*: a worker claims `pending` rows with `SELECT … FOR UPDATE SKIP LOCKED`, and a
-  job whose worker crashed mid-run is re-queued after a timeout. Nothing is lost to a restart —
-  the durability a broker gives, with one fewer moving part. Live status reaches the browser
-  over SSE fed by Postgres `LISTEN/NOTIFY` (no polling). The worker runs inline in dev and as
-  its own container in the compose stack (scale it freely — SKIP LOCKED keeps claims disjoint).
-- **Ladder in Postgres, grounding in Qdrant.** Retrieval earns its place for *grounding with
-  citations*, not for the ≤4 short hints (those are gated by a level filter, not similarity).
-- **No problem scraping.** User-provided input + permitted APIs only.
-- **Provider-agnostic, per-task, BYOK.** No vendor lock-in; §4.
-
----
-
-## 8. Tech stack
-
-**Backend:** FastAPI (async), SQLAlchemy 2.0 + Alembic on PostgreSQL, Redis (cache +
-rate-limit lease), Qdrant (grounding vectors), the OpenAI SDK against any compatible provider,
-optional Langfuse tracing. **Frontend:** React + Vite + TypeScript, TanStack Query, KaTeX.
-**Auth:** JWT (access + refresh). **Tests:** pytest (LLM/Qdrant/CF-API mocked; no live network
-in CI).
-
----
-
-## 9. Licensing & attribution
-
-Application code is MIT/Apache-style open source. The grounding corpora are **fetched, not
-bundled**, and used under their own licenses — **CP-Algorithms** (CC BY-SA 4.0), **PyRival**
-(Apache-2.0), **USACO Guide** (CC BY-NC-SA 4.0, non-commercial), **CP Handbook** (free to use).
-Attribution is shown as a "Grounded by" credit; corpora are never redistributed.
-
-**User-added sources** (a GitHub repo or PDF you supply) are your responsibility: because Spotr
-is self-hosted, you're the admin, and the add-source form requires you to confirm you have the
-right to use what you add. Your sources are embedded into your own local Qdrant and never leave
-your machine.
+The application code is open source under an MIT/Apache-style license. Sources you add (a repo
+or a PDF) are your responsibility: because Spotr is self-hosted you are the admin, and the
+add-source form asks you to confirm you have the right to use what you add. Your sources are
+embedded into your own local Qdrant and never leave your machine.

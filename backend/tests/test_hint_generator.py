@@ -27,7 +27,7 @@ def _valid_payload():
     return {
         "levels": [
             "Notice the size of n and the time limit.",
-            "Because n is large, an O(n^2) scan is too slow — think O(n log n).",
+            "Because n is large, an O(n^2) scan is too slow - think O(n log n).",
             "Sort the array, then sweep with two pointers; this is correct because …",
             "Full walkthrough: sort ascending, maintain two indices, and for each … "
             "which yields the answer in O(n log n).",
@@ -45,7 +45,7 @@ async def test_returns_ladder_from_valid_output():
 
 
 async def test_ladder_length_is_dynamic():
-    # A one-idea problem earns a short ladder; a layered one earns more. Both are valid —
+    # A one-idea problem earns a short ladder; a layered one earns more. Both are valid -
     # the count is not fixed to four.
     async def three(**kwargs):
         return {"levels": [
@@ -83,7 +83,7 @@ async def test_prompt_includes_statement_constraints_and_editorial():
 
 async def test_shorter_later_level_is_still_valid():
     # Regression: graduated hints increase in what they reveal, not in length. A crisp
-    # final answer (level4) is often shorter than the level-3 reasoning — must NOT fail.
+    # final answer (level4) is often shorter than the level-3 reasoning - must NOT fail.
     async def chat_fn(**kwargs):
         return {"levels": [
             "Look at how small the constraint on w is; efficiency is irrelevant here.",

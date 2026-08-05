@@ -67,7 +67,7 @@ class ProblemIngest(BaseModel):
 
     The user provides the problem: `url` identifies it on the chosen `source`, and the
     statement/constraints/samples are supplied directly (paste or screenshot-normalized
-    on the client — see step 3). We do NOT scrape restricted problem HTML. Metadata
+    on the client - see step 3). We do NOT scrape restricted problem HTML. Metadata
     (title/rating/tags) and the editorial are fetched only via the source's permitted
     API from `url` / `editorial_url`.
     """
@@ -106,7 +106,7 @@ class ProblemOut(BaseModel):
     time_limit_ms: int | None
     memory_limit_mb: int | None
     editorial_url: str | None
-    # The raw editorial is deliberately NOT exposed — it would spoil the ladder.
+    # The raw editorial is deliberately NOT exposed - it would spoil the ladder.
     # Clients get only whether one was captured.
     has_editorial: bool
     is_interactive: bool
@@ -114,13 +114,13 @@ class ProblemOut(BaseModel):
     ingestion_status: str
     ingestion_error: str | None
     created_at: datetime
-    # Number of ladder levels generated (0–4). Content is never exposed here — the
+    # Number of ladder levels generated (0-4). Content is never exposed here - the
     # tutor serves levels one at a time via the revealed-set disclosure flow (step 6).
     level_count: int = 0
 
 
 class ProblemSummary(BaseModel):
-    """A lightweight row for the problems list — just enough to show and link. Deliberately
+    """A lightweight row for the problems list - just enough to show and link. Deliberately
     omits the heavy fields (statement, figures, samples) so a page stays small."""
 
     model_config = ConfigDict(from_attributes=True)
@@ -148,7 +148,7 @@ class ProblemListOut(BaseModel):
 # --- Tutor (step 6) ----------------------------------------------------------
 class RevealedLevel(BaseModel):
     """An UNLOCKED ladder rung, with how it was unlocked. Only revealed levels are ever
-    serialized — locked content stays server-side (the no-leakage guarantee).
+    serialized - locked content stays server-side (the no-leakage guarantee).
 
     `via` drives the design's earned (green) vs opened (violet) treatment; `earned_text` is
     the student's own words the judge matched (chat unlocks only), quoted back in the unlock
@@ -187,7 +187,7 @@ class TutorSessionOut(BaseModel):
 
 
 class RevealOut(BaseModel):
-    """Result of a manual sequential reveal — the newly unlocked rung + the updated set."""
+    """Result of a manual sequential reveal - the newly unlocked rung + the updated set."""
 
     level: int
     content: str
@@ -202,7 +202,7 @@ class MessageRequest(BaseModel):
 # --- Grounding sources (bring your own references) ---------------------------
 class GithubSourceCreate(BaseModel):
     """Add a public GitHub repo as a grounding corpus. Markdown/text files under it are
-    chunked + embedded. `license_ack` is the on-page consent (self-hosted → user is admin)."""
+    chunked + embedded. `license_ack` is the on-page consent (self-hosted -> user is admin)."""
 
     label: str = Field(min_length=1, max_length=80)
     repo_url: str = Field(min_length=1, max_length=512)

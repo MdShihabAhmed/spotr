@@ -1,4 +1,4 @@
-/* Spotr — flat, oklch, three-zone design. No radius, no shadows: separation comes from
+/* Spotr - flat, oklch, three-zone design. No radius, no shadows: separation comes from
    value + hairlines only (see design_handoff). Two type roles share a family by default but
    stay separate vars; mono carries all metadata/code. */
 
@@ -7,7 +7,7 @@
   --read: "Instrument Sans", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, monospace;
 
-  /* Zone grounds — one cool neutral stepped by value, with a slight hue nudge (250 → 268). */
+  /* Zone grounds - one cool neutral stepped by value, with a slight hue nudge (250 → 268). */
   --z-center: oklch(0.995 0.001 250);
   --z-left: oklch(0.945 0.012 250);
   --z-left-head: oklch(0.917 0.015 250);
@@ -28,7 +28,7 @@
   --b-dark: oklch(0.32 0.018 258);
   --b-dark-2: oklch(0.36 0.018 258);
 
-  /* Ink — pick by the ground it sits on, never by role. */
+  /* Ink - pick by the ground it sits on, never by role. */
   --ink: oklch(0.22 0.02 258);
   --ink-rail: oklch(0.24 0.02 262);
   --ink-stmt: oklch(0.3 0.018 258);
@@ -37,7 +37,7 @@
   --ink-light: oklch(0.94 0.005 258);
   --ink-muted-dark: oklch(0.66 0.014 258);
 
-  /* Semantic — earned (chat, green) vs opened (manual, violet). Not success/warning. */
+  /* Semantic - earned (chat, green) vs opened (manual, violet). Not success/warning. */
   --earned: oklch(0.47 0.15 142);
   --earned-bright: oklch(0.82 0.18 142);
   --earned-rule: oklch(0.62 0.17 142);
@@ -727,7 +727,7 @@ p {
   margin-top: 10px;
 }
 
-/* Context sub-panel — "In the prompt" */
+/* Context sub-panel - "In the prompt" */
 .prompt-panel {
   background: var(--z-right-sub);
   border-top: 1px solid var(--b-right);

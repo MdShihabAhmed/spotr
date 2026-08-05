@@ -137,7 +137,7 @@ export type Problem = {
   ingestion_status: IngestionStatus;
   ingestion_error: string | null;
   created_at: string;
-  // Number of graduated ladder levels generated (0–4). Content is served one level at
+  // Number of graduated ladder levels generated (0-4). Content is served one level at
   // a time by the tutor's revealed-set flow, never all at once.
   level_count: number;
 };
@@ -263,7 +263,7 @@ export type TutorMessage = {
 /** How a rung was unlocked: "chat" = earned (green, quotes your words), "manual" = opened (violet). */
 export type UnlockVia = "chat" | "manual";
 
-/** An UNLOCKED ladder rung. Locked rungs are never sent — that's the no-leakage guarantee.
+/** An UNLOCKED ladder rung. Locked rungs are never sent - that's the no-leakage guarantee.
  *  `earned_text` is the student's own words the judge matched (chat unlocks only). */
 export type RevealedLevel = {
   level: number;
@@ -296,7 +296,7 @@ export const revealNextLevel = (slug: string) =>
   api.post<RevealResult>(`/tutor/${slug}/reveal`);
 
 /** Bearer-authorized fetch that transparently refreshes once on a 401, returning the raw
- *  Response — used for the SSE stream, which `apiFetch` (JSON-only) can't handle. */
+ *  Response - used for the SSE stream, which `apiFetch` (JSON-only) can't handle. */
 export async function authorizedFetch(path: string, init: RequestInit = {}): Promise<Response> {
   let resp = await send(path, init);
   if (resp.status === 401 && tokens.refresh()) {
@@ -382,7 +382,7 @@ export type GroundingSource = {
 
 export const listSources = () => api.get<{ items: GroundingSource[] }>("/grounding/sources");
 
-/** Retry now — skip a scheduled wait (network blip, or you've freed up quota). Resumes from
+/** Retry now - skip a scheduled wait (network blip, or you've freed up quota). Resumes from
  *  what's already embedded. */
 export const retrySource = (id: number) =>
   api.post<GroundingSource>(`/grounding/sources/${id}/retry`);
@@ -400,7 +400,7 @@ export async function addPdfSource(
   form.append("file", file);
   form.append("label", label);
   form.append("license_ack", String(licenseAck));
-  // No Content-Type header — the browser sets the multipart boundary itself.
+  // No Content-Type header - the browser sets the multipart boundary itself.
   const resp = await authorizedFetch("/grounding/sources/pdf", { method: "POST", body: form });
   const body = await resp.json().catch(() => ({}));
   if (!resp.ok)

@@ -1,4 +1,4 @@
-"""Background ingestion orchestrator: user-provided problem → populated `Problem` row.
+"""Background ingestion orchestrator: user-provided problem -> populated `Problem` row.
 
 Runs as a FastAPI `BackgroundTask` (editorial fetch + level generation is multi-second).
 Two hard rules:
@@ -9,7 +9,7 @@ Two hard rules:
   actionable `ingestion_error`.
 
 Data model (re-architected): the user supplies statement/constraints/samples (no
-scraping). The pipeline fetches only permitted extras — metadata + editorial — via the
+scraping). The pipeline fetches only permitted extras - metadata + editorial - via the
 problem's `ProblemSource`, then generates the graduated ladder. Everything external is
 injected so the whole pipeline is testable offline against sqlite with fakes.
 
@@ -46,7 +46,7 @@ async def run_ingestion(
     async with session_maker() as db:
         problem = await db.get(Problem, problem_id)
         if problem is None:
-            return  # row deleted between scheduling and running — nothing to do
+            return  # row deleted between scheduling and running - nothing to do
 
         try:
             await _ingest(db, problem, source_resolver, level_generator)
@@ -113,7 +113,7 @@ async def _ingest(
     # --- editorial -----------------------------------------------------------
     # Fetched via the source's permitted API (CF: blogEntry.view). Stored server-side
     # only, never returned to clients. A problem with NO editorial_url reaches `ready`
-    # without a ladder (fine — the editorial is optional). But if the user *supplied* a
+    # without a ladder (fine - the editorial is optional). But if the user *supplied* a
     # link, a fetch failure is surfaced: the whole point of the link was the ladder, so
     # failing visibly beats silently reaching `ready` with an unexplained "no editorial".
     if problem.editorial_url and not problem.editorial_text:
@@ -136,7 +136,7 @@ async def _ingest(
 
     # --- graduated ladder ----------------------------------------------------
     # Needs an editorial to ground the levels. Without one the problem still reaches
-    # `ready` (statement + samples are usable) — levels get generated on a later
+    # `ready` (statement + samples are usable) - levels get generated on a later
     # re-ingest once an editorial link is supplied.
     if problem.editorial_text:
         problem.ingestion_status = "generating_levels"

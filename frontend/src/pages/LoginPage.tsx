@@ -5,7 +5,7 @@ import { ApiError } from "../lib/api";
 import { tokens } from "../lib/auth";
 
 function messageFor(error: unknown): string {
-  // Branch on the machine-readable `code`, not the human text — that's the whole
+  // Branch on the machine-readable `code`, not the human text - that's the whole
   // point of the {detail, code} error schema.
   if (error instanceof ApiError) {
     if (error.code === "invalid_credentials") return "Incorrect email or password.";
@@ -33,7 +33,7 @@ export function LoginPage() {
         <h1>
           spot<span style={{ color: "var(--earned)" }}>r</span>
         </h1>
-        <p className="lede">Upsolve Codeforces problems properly.</p>
+        <p className="lede">Upsolve competitive programming problems properly.</p>
 
         <div className="field">
           <label htmlFor="email">Email</label>

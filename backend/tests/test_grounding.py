@@ -1,7 +1,7 @@
 """Grounding ingestion + retrieval tests.
 
 Run against a real in-process Qdrant (`AsyncQdrantClient(location=":memory:")`) and sqlite,
-with a deterministic fake embedder — so chunking, upsert, resume, and similarity retrieval
+with a deterministic fake embedder - so chunking, upsert, resume, and similarity retrieval
 are exercised for real, no network and no service.
 """
 
@@ -24,7 +24,7 @@ DIM = get_settings().embedding_dim
 
 
 def fake_embed():
-    """Deterministic char-position embedding: overlapping text → higher cosine, so a query
+    """Deterministic char-position embedding: overlapping text -> higher cosine, so a query
     that shares words with a chunk ranks it first. Vectors match the collection dimension."""
 
     async def embed(texts):
@@ -67,32 +67,32 @@ x
 
 
 def test_chunk_markdown_splits_sections_with_provenance():
-    chunks = chunk_markdown(MD, source="cp-algorithms", url="https://cp-algorithms.com/graph/dijkstra.html")
+    chunks = chunk_markdown(MD, source="docs", url="https://example.test/docs/dijkstra")
     titles = [c.title for c in chunks]
     # Intro (H1 title) + the Complexity section; the "Tiny" section is dropped (too short).
     assert "Dijkstra Algorithm" in titles
-    assert "Dijkstra Algorithm — Complexity" in titles
+    assert "Dijkstra Algorithm - Complexity" in titles
     assert all("Tiny" not in t for t in titles)
     # Front matter stripped; provenance carried on every chunk.
-    assert all(c.source == "cp-algorithms" for c in chunks)
-    assert all(c.url.endswith("/graph/dijkstra.html") for c in chunks)
+    assert all(c.source == "docs" for c in chunks)
+    assert all(c.url.endswith("/docs/dijkstra") for c in chunks)
     assert "title: Dijkstra" not in "\n".join(c.content for c in chunks)
 
 
 def test_point_id_is_stable():
     a = RawChunk(source="s", title="t", url="u", content="c")
     b = RawChunk(source="s", title="t", url="u", content="DIFFERENT")
-    # Same source|url|title → same point id (idempotent re-seed overwrites in place).
+    # Same source|url|title -> same point id (idempotent re-seed overwrites in place).
     assert a.point_id == b.point_id
 
 
 # --- ingest + retrieve -------------------------------------------------------
 CHUNKS = [
-    RawChunk(source="cp-algorithms", title="Dijkstra", url="https://x/dijkstra.html",
+    RawChunk(source="docs", title="Dijkstra", url="https://x/dijkstra",
              content="dijkstra shortest path priority queue non negative weights"),
-    RawChunk(source="cp-algorithms", title="DSU", url="https://x/dsu.html",
+    RawChunk(source="docs", title="DSU", url="https://x/dsu",
              content="disjoint set union find path compression union by rank"),
-    RawChunk(source="pyrival", title="pyrival/graphs/dijkstra.py", url="https://x/blob/dijkstra.py",
+    RawChunk(source="snippets", title="graphs/dijkstra.py", url="https://x/blob/dijkstra.py",
              content="def dijkstra(graph, start): heap based single source shortest path"),
 ]
 
@@ -115,9 +115,9 @@ async def test_ingest_writes_rows_and_makes_chunks_retrievable(db_session_maker,
     )
     assert hits
     assert hits[0].title == "Dijkstra"  # most similar ranks first
-    assert hits[0].url == "https://x/dijkstra.html"  # provenance for the citation
+    assert hits[0].url == "https://x/dijkstra"  # provenance for the citation
     assert hits[0].citation() == {
-        "source": "cp-algorithms", "title": "Dijkstra", "url": "https://x/dijkstra.html", "page": None
+        "source": "docs", "title": "Dijkstra", "url": "https://x/dijkstra", "page": None
     }
 
 
@@ -127,23 +127,23 @@ async def test_retrieval_can_filter_by_source(db_session_maker, qdrant):
         embed_fn=fake_embed(), chunks=iter(CHUNKS),
     )
     hits = await retrieve_grounding(
-        "dijkstra shortest path", client=qdrant, embed_fn=fake_embed(), sources=["pyrival"]
+        "dijkstra shortest path", client=qdrant, embed_fn=fake_embed(), sources=["snippets"]
     )
     assert hits
-    assert all(h.source == "pyrival" for h in hits)
+    assert all(h.source == "snippets" for h in hits)
 
 
 async def test_resume_skips_already_embedded_unless_reset(db_session_maker, qdrant):
     # Resume/reset key on the loader's source, so use only that source's chunks (what a
     # real loader yields).
-    cp_chunks = [c for c in CHUNKS if c.source == "cp-algorithms"]
+    cp_chunks = [c for c in CHUNKS if c.source == "docs"]
     embed = fake_embed()
     first = await ingest_corpus(
         _loader(), session_maker=db_session_maker, client=qdrant, embed_fn=embed,
         chunks=iter(cp_chunks),
     )
     assert first == len(cp_chunks)
-    # Re-run without reset: everything already embedded → nothing new, no duplicate rows.
+    # Re-run without reset: everything already embedded -> nothing new, no duplicate rows.
     again = await ingest_corpus(
         _loader(), session_maker=db_session_maker, client=qdrant, embed_fn=embed,
         chunks=iter(cp_chunks),
@@ -168,6 +168,6 @@ async def test_empty_query_returns_no_hits(qdrant):
 
 def _loader():
     """A loader whose source matches the CHUNKS' sources; parsing is bypassed via `chunks=`."""
-    from app.ingestion.grounding import CpAlgorithmsLoader
+    from app.ingestion.grounding import UserGithubLoader
 
-    return CpAlgorithmsLoader()
+    return UserGithubLoader(source_key="docs", repo_url="https://github.com/x/y")

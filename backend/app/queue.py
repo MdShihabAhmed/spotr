@@ -1,13 +1,13 @@
-"""Durable ingestion job queue — the `problems` row *is* the queue.
+"""Durable ingestion job queue - the `problems` row *is* the queue.
 
-Ingestion is 30–90s of API calls + LLM work, so it can't run inside the request. Instead of
+Ingestion is 30-90s of API calls + LLM work, so it can't run inside the request. Instead of
 Celery + a broker, the job state lives in the `Problem.ingestion_status` column and a worker
 process claims work directly from Postgres:
 
-- **Claim** a `pending` row with `SELECT … FOR UPDATE SKIP LOCKED` — multiple workers can run
+- **Claim** a `pending` row with `SELECT … FOR UPDATE SKIP LOCKED` - multiple workers can run
   without ever grabbing the same job, and an unclaimed job just waits in the table.
 - **Crash recovery**: a row left in an in-flight state past a timeout (its worker died) is
-  re-queued (or failed after `max_attempts`). Nothing is lost to a restart or a crash — the
+  re-queued (or failed after `max_attempts`). Nothing is lost to a restart or a crash - the
   durability a broker would give us, with one fewer moving part.
 - **Wake-ups** ride Postgres `LISTEN/NOTIFY`: enqueue fires `ingest_jobs` so an idle worker
   picks up instantly, and each status change fires `problem_status` so the SSE endpoint can
@@ -32,10 +32,10 @@ from app.config import get_settings
 from app.database import engine
 from app.models import GroundingSource, Problem
 
-# Postgres NOTIFY channels (hardcoded constants — never interpolate user input into LISTEN).
-INGEST_CHANNEL = "ingest_jobs"       # fired on enqueue → wakes an idle worker (problems + sources)
-STATUS_CHANNEL = "problem_status"    # fired on every status change → feeds the SSE endpoint
-SOURCE_STATUS_CHANNEL = "source_status"  # grounding-source status changes → its SSE endpoint
+# Postgres NOTIFY channels (hardcoded constants - never interpolate user input into LISTEN).
+INGEST_CHANNEL = "ingest_jobs"       # fired on enqueue -> wakes an idle worker (problems + sources)
+STATUS_CHANNEL = "problem_status"    # fired on every status change -> feeds the SSE endpoint
+SOURCE_STATUS_CHANNEL = "source_status"  # grounding-source status changes -> its SSE endpoint
 
 # The two claimed/in-flight states. `pending` waits to be claimed; `ready`/`failed` are terminal.
 IN_FLIGHT_STATES = ("normalizing", "generating_levels")
@@ -48,7 +48,7 @@ async def _emit(channel: str, payload: str) -> None:
     """Fire a NOTIFY on its own short-lived connection. Swallows every error: on sqlite
     (tests) `pg_notify` doesn't exist, and a transient DB blip must not fail the caller."""
     try:
-        async with engine.begin() as conn:  # begin() commits on exit → the NOTIFY is delivered
+        async with engine.begin() as conn:  # begin() commits on exit -> the NOTIFY is delivered
             await conn.execute(text("SELECT pg_notify(:c, :p)"), {"c": channel, "p": payload})
     except Exception:
         pass
@@ -130,7 +130,7 @@ async def claim_next_job(db: AsyncSession) -> int | None:
 async def recover_stuck_jobs(
     db: AsyncSession, *, stuck_timeout_seconds: int, max_attempts: int
 ) -> list[int]:
-    """Re-queue jobs whose worker died mid-run — rows stuck in an in-flight state with a
+    """Re-queue jobs whose worker died mid-run - rows stuck in an in-flight state with a
     claim older than the timeout. Past `max_attempts` a job is failed instead of retried
     forever (it may be the thing crashing the worker). Returns the affected problem ids."""
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=stuck_timeout_seconds)
@@ -149,7 +149,7 @@ async def recover_stuck_jobs(
         if problem.attempts >= max_attempts:
             problem.ingestion_status = "failed"
             problem.ingestion_error = (
-                "Ingestion didn't finish after several attempts — the worker may have "
+                "Ingestion didn't finish after several attempts - the worker may have "
                 "crashed or restarted mid-job. Re-ingest to try again."
             )
         else:

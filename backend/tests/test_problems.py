@@ -15,7 +15,7 @@ CONTEST_URL = "https://codeforces.com/contest/1846/problem/C"
 def scheduled(monkeypatch):
     """Record the ids the router enqueues for the worker. Patching the NOTIFY seam keeps
     router tests off Postgres (sqlite has no `pg_notify`) while still asserting *what* got
-    queued — a job is enqueued by committing `pending` + firing this wake-up."""
+    queued - a job is enqueued by committing `pending` + firing this wake-up."""
     calls: list[int] = []
 
     async def fake_notify(problem_id: int):
@@ -104,7 +104,7 @@ async def test_ingest_stores_note_and_figures(client, auth_headers, scheduled):
 async def test_reingest_other_url_form_is_idempotent(client, auth_headers, scheduled):
     first = await client.post("/problems/ingest", json={"url": PROBLEMSET_URL}, headers=auth_headers)
     pid = first.json()["id"]
-    # Same problem, the OTHER URL form — must return the existing row, not a dupe.
+    # Same problem, the OTHER URL form - must return the existing row, not a dupe.
     second = await client.post("/problems/ingest", json={"url": CONTEST_URL}, headers=auth_headers)
     assert second.status_code == 200
     assert second.json()["id"] == pid
@@ -115,7 +115,7 @@ async def test_reingest_ready_with_new_editorial_reprocesses(
     client, auth_headers, scheduled, db_session_maker
 ):
     # A problem that reached `ready` without an editorial must re-run when the editorial
-    # link is supplied on a later re-ingest — not be a silent no-op.
+    # link is supplied on a later re-ingest - not be a silent no-op.
     created = (
         await client.post("/problems/ingest", json={"url": PROBLEMSET_URL}, headers=auth_headers)
     ).json()

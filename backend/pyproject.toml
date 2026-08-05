@@ -1,7 +1,7 @@
 [project]
 name = "spotr"
 version = "0.1.0"
-description = "Spotr — a grounded Socratic tutor for competitive programmers who want to upsolve: a graduated hint ladder that never reveals more than you've earned, grounded in openly-licensed references with citations."
+description = "Spotr - a grounded Socratic tutor for competitive programmers who want to upsolve: a graduated hint ladder that never reveals more than you've earned, grounded in references you add, with citations."
 requires-python = ">=3.14"
 dependencies = [
     "alembic>=1.18.5",

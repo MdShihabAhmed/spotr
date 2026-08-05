@@ -3,8 +3,8 @@ import "katex/dist/katex.min.css";
 
 /**
  * Render text containing LaTeX from any of our sources:
- * - Codeforces statements/constraints use triple dollars: `$$$…$$$` (inline).
- * - Gemini-generated hints and tutor chat use STANDARD LaTeX: `$…$` / `\(…\)` inline,
+ * - Problem statements/constraints use triple dollars: `$$$…$$$` (inline).
+ * - Generated hints and tutor chat use STANDARD LaTeX: `$…$` / `\(…\)` inline,
  *   `$$…$$` / `\[…\]` display.
  *
  * A single tokenizer walks the string trying delimiters LONGEST-FIRST, so `$$$` isn't

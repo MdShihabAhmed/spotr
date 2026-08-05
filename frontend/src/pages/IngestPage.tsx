@@ -20,9 +20,9 @@ async function fileToDataUri(file: File): Promise<string> {
 // "fetching metadata" reads done once we reach generating_levels.
 const STAGES = [
   { name: "normalizing", note: "vision pass rebuilds statement, constraints, samples and LaTeX" },
-  { name: "fetching metadata", note: "Codeforces API — rating, tags, limits — under the rate lease" },
-  { name: "generating levels", note: "one grounded call produces four distinct levels" },
-  { name: "ready", note: "all four sealed · session opened" },
+  { name: "fetching metadata", note: "the problem source's API: rating, tags, limits, under the rate lease" },
+  { name: "generating levels", note: "one grounded call produces the graduated levels" },
+  { name: "ready", note: "sealed · session opened" },
 ];
 const ACTIVE_INDEX: Record<IngestionStatus, number> = {
   pending: -1,
@@ -40,7 +40,7 @@ function Pipeline({ status, error, slug }: { status: IngestionStatus | null; err
       : status === "failed"
         ? null
         : status === "ready"
-          ? `${slug} is ready — four levels sealed.`
+          ? `${slug} is ready - four levels sealed.`
           : "Runs on the durable job queue on its own database session. A failure lands as a readable error, never a crash.";
 
   return (
@@ -161,7 +161,7 @@ export function IngestPage() {
   const message =
     err instanceof ApiError
       ? err.code === "invalid_problem_url"
-        ? "That doesn't look like a Codeforces problem URL. Use a /problemset/ or /contest/ link."
+        ? "That doesn't look like a valid problem URL. Use a /problemset/ or /contest/ link."
         : err.message
       : err
         ? "Couldn't reach the backend. Is it running on :8000?"
@@ -184,7 +184,7 @@ export function IngestPage() {
     <div className="page">
       <h1 className="h1-ingest">Bring the problem to it.</h1>
       <p className="lede">
-        Spotr never scrapes a problem page. You paste the statement or drop a screenshot —
+        Spotr never scrapes a problem page. You paste the statement or drop a screenshot -
         figures included. It fetches only what the official API permits: metadata, and the
         editorial from a link you supply. The editorial is read once, at ingestion, and never sent
         back to your browser.
@@ -223,7 +223,7 @@ export function IngestPage() {
                     <span className="dropzone-glyph" aria-hidden />
                     <span className="dropzone-title">drop a screenshot of the problem</span>
                     <span className="dropzone-sub">
-                      Vision reads rendered math and figures directly — better than OCR, better than
+                      Vision reads rendered math and figures directly - better than OCR, better than
                       copy-paste.
                     </span>
                     <input type="file" accept="image/*" multiple onChange={onPickImages} hidden />
@@ -235,30 +235,22 @@ export function IngestPage() {
                 <textarea
                   className="textarea"
                   rows={9}
-                  placeholder="Paste the statement, constraints and samples. Messy is fine — mangled line breaks, half-broken math. A multimodal pass rebuilds the LaTeX."
+                  placeholder="Paste the statement, constraints and samples. Messy is fine - mangled line breaks, half-broken math. A multimodal pass rebuilds the LaTeX."
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                 />
               </div>
             )}
 
-            <div className="pair">
-              <div className="field">
-                <label>Source</label>
-                <select className="select" value={source} disabled>
-                  <option value="codeforces">Codeforces</option>
-                </select>
-              </div>
-              <div className="field" style={{ flex: 2 }}>
-                <label>Editorial link</label>
-                <input
-                  className="input"
-                  type="url"
-                  placeholder="codeforces.com/blog/entry/…"
-                  value={editorialUrl}
-                  onChange={(e) => setEditorialUrl(e.target.value)}
-                />
-              </div>
+            <div className="field">
+              <label>Editorial link</label>
+              <input
+                className="input"
+                type="url"
+                placeholder="editorial link (optional)"
+                value={editorialUrl}
+                onChange={(e) => setEditorialUrl(e.target.value)}
+              />
             </div>
 
             <div className="field">
@@ -266,7 +258,7 @@ export function IngestPage() {
               <input
                 className="input"
                 type="url"
-                placeholder="https://codeforces.com/problemset/problem/1846/C"
+                placeholder="paste the problem link"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
               />
@@ -324,7 +316,7 @@ export function IngestPage() {
                 </div>
 
                 <div className="field">
-                  <label>Note (explains the samples — shown after them)</label>
+                  <label>Note (explains the samples - shown after them)</label>
                   <textarea className="textarea" rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
                   {note.trim() && (
                     <div className="preview">

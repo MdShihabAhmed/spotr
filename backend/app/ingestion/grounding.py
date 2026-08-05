@@ -1,31 +1,22 @@
-"""Grounding ingestion — turn the openly-licensed corpora into cited, retrievable chunks.
+"""Grounding ingestion: turn a user-added source into cited, retrievable chunks.
 
-Pipeline (per corpus): **clone/pull the source repo → chunk at section level with
-provenance → embed → upsert to Qdrant + mirror to Postgres (`GroundingChunk`)**. Run as a
-CLI (`python -m app.ingestion.grounding`) or a compose `seed` service. The tutor later
-`retrieve_grounding(query)` to cite relevant passages.
+Pipeline (per source): fetch it locally (clone a repo, or read an uploaded file), chunk at
+section level with provenance, embed, then upsert to Qdrant and mirror to Postgres
+(`GroundingChunk`). The tutor later calls `retrieve_grounding(query)` to cite relevant
+passages.
 
 Design decisions:
-- **Section-level chunks, not whole articles.** Each chunk carries exact provenance
-  (`source, url, section heading, page`) — a license obligation *and* a credibility feature
-  (every tutor claim can be traced to a citation). This fixes the old `ConceptNote`
-  one-embedding-per-article bug.
-- **Deterministic point ids** (`uuid5` of source+url+section) so a re-seed overwrites in
-  place — idempotent, and resumable (already-present chunks are skipped unless `--reset`).
-- **Batched embedding** to respect the free-tier daily cap; the job can be re-run to finish.
-- **Everything injectable** (`embed_fn`, `client`, `session_maker`) so ingestion is tested
-  offline against an in-memory Qdrant with a fake embedder — no network, no service.
-
-Corpora: CP-Algorithms (CC BY-SA) is the
-flagship prose corpus and is fully implemented; PyRival (Apache-2.0) adds reference
-implementations. USACO Guide (MDX) and the CP Handbook (PDF) have registered loaders whose
-parsing is left as a marked extension point — the framework ingests any `CorpusLoader`.
+- Section-level chunks, not whole documents. Each chunk carries exact provenance
+  (`source, url, section heading, page`) so every tutor claim can be traced to a citation.
+- Deterministic point ids (`uuid5` of source+url+section) so a re-run overwrites in place:
+  idempotent, and resumable (already-present chunks are skipped unless `reset`).
+- Batched embedding, so a run that hits a provider's daily cap can be re-run to finish.
+- Everything injectable (`embed_fn`, `client`, `session_maker`) so ingestion is tested
+  offline against an in-memory Qdrant with a fake embedder, no network and no service.
 """
 
 from __future__ import annotations
 
-import argparse
-import asyncio
 import re
 import subprocess
 import uuid
@@ -42,7 +33,7 @@ from app.llm import embed_texts
 from app.models import GroundingChunk
 from app.vector_store import GroundingHit, ensure_collection, get_qdrant, search, upsert_chunks
 
-# uuid5 namespace for grounding points — keeps ids stable across re-seeds.
+# uuid5 namespace for grounding points - keeps ids stable across re-seeds.
 _POINT_NAMESPACE = uuid.UUID("6f9b2c1e-1c3a-4a4e-9f0b-c0ffee000001")
 
 EmbedFn = Callable[[list[str]], Awaitable[list[list[float]]]]
@@ -84,7 +75,7 @@ _MIN_CHUNK_CHARS = 80  # drop trivially short sections (nav stubs, one-liners)
 def chunk_markdown(text: str, *, source: str, url: str) -> list[RawChunk]:
     """Split a markdown article into section-level chunks (one per `##` heading, plus the
     intro before the first one). Front matter is stripped; the H1 title prefixes each
-    section title so a chunk reads standalone (e.g. "Dijkstra — Complexity")."""
+    section title so a chunk reads standalone (e.g. "Dijkstra - Complexity")."""
     text = _FRONT_MATTER.sub("", text).strip()
     h1 = _H1.search(text)
     doc_title = h1.group(1).strip() if h1 else url.rsplit("/", 1)[-1]
@@ -103,7 +94,7 @@ def chunk_markdown(text: str, *, source: str, url: str) -> list[RawChunk]:
         if len(section) < _MIN_CHUNK_CHARS:
             continue
         chunks.append(
-            RawChunk(source=source, title=f"{doc_title} — {heading}", url=url, content=section)
+            RawChunk(source=source, title=f"{doc_title} - {heading}", url=url, content=section)
         )
     return chunks
 
@@ -133,54 +124,6 @@ class CorpusLoader(ABC):
         """Yield section-level chunks parsed from the local corpus."""
 
 
-class CpAlgorithmsLoader(CorpusLoader):
-    """CP-Algorithms (CC BY-SA 4.0): markdown under `src/`. Maps each file to its public
-    cp-algorithms.com URL for citations."""
-
-    source = "cp-algorithms"
-    repo = "https://github.com/cp-algorithms/cp-algorithms"
-    site = "https://cp-algorithms.com"
-
-    def load(self, local: Path) -> Iterator[RawChunk]:
-        for md in sorted((local / "src").rglob("*.md")):
-            rel = md.relative_to(local / "src").as_posix()  # e.g. "graph/dijkstra.md"
-            url = f"{self.site}/{rel[:-3]}.html"  # → https://cp-algorithms.com/graph/dijkstra.html
-            text = md.read_text(encoding="utf-8", errors="ignore")
-            yield from chunk_markdown(text, source=self.source, url=url)
-
-
-class PyRivalLoader(CorpusLoader):
-    """PyRival (Apache-2.0): reference implementations. Each `.py` under `pyrival/` is one
-    chunk (title = module path, content = source), cited by its GitHub blob URL."""
-
-    source = "pyrival"
-    repo = "https://github.com/cheran-senthil/PyRival"
-    blob = "https://github.com/cheran-senthil/PyRival/blob/master"
-
-    def load(self, local: Path) -> Iterator[RawChunk]:
-        for py in sorted((local / "pyrival").rglob("*.py")):
-            if py.name == "__init__.py":
-                continue
-            rel = py.relative_to(local).as_posix()
-            code = py.read_text(encoding="utf-8", errors="ignore").strip()
-            if len(code) < _MIN_CHUNK_CHARS:
-                continue
-            yield RawChunk(
-                source=self.source, title=rel, url=f"{self.blob}/{rel}", content=code
-            )
-
-
-# Registered loaders. USACO Guide (MDX) and CP Handbook (PDF) are intentional extension
-# points — add their loaders here and the pipeline ingests them unchanged.
-_LOADERS: dict[str, CorpusLoader] = {
-    loader.source: loader for loader in (CpAlgorithmsLoader(), PyRivalLoader())
-}
-
-
-def available_corpora() -> list[str]:
-    return sorted(_LOADERS)
-
-
 # --- orchestration -----------------------------------------------------------
 async def _existing_point_ids(db: AsyncSession, source: str) -> set[str]:
     rows = await db.scalars(
@@ -206,7 +149,7 @@ async def ingest_corpus(
 
     `chunks` lets callers/tests supply chunks directly (skipping the git clone + file
     parse); otherwise the loader fetches and parses the corpus. `on_progress(done, total)` is
-    called once the total is known and after each embedded batch — the source pipeline uses it
+    called once the total is known and after each embedded batch - the source pipeline uses it
     to surface live progress (`done` counts already-embedded chunks from prior runs too)."""
     settings = get_settings()
     client = client or get_qdrant()
@@ -285,7 +228,7 @@ async def retrieve_grounding(
 
 # --- user-provided sources (bring your own references) -----------------------
 # Files we chunk from a user's GitHub repo. Prose is section/paragraph-chunked; code files
-# become one chunk each (like PyRival). Everything else (images, binaries) is skipped.
+# become one chunk each. Everything else (images, binaries) is skipped.
 _PROSE_EXTS = {".md", ".markdown", ".txt", ".rst"}
 _CODE_EXTS = {".py", ".cpp", ".cc", ".cxx", ".h", ".hpp", ".java", ".kt", ".rs", ".go", ".js", ".ts", ".sql"}
 _SKIP_DIRS = {".git", "node_modules", "vendor", "dist", "build", "__pycache__", ".github"}
@@ -319,7 +262,7 @@ def chunk_text(
 
 
 def _github_blob_base(repo_url: str) -> str:
-    """`https://github.com/o/r(.git)` → `https://github.com/o/r/blob/HEAD` for file citations."""
+    """`https://github.com/o/r(.git)` -> `https://github.com/o/r/blob/HEAD` for file citations."""
     return f"{repo_url.rstrip('/').removesuffix('.git')}/blob/HEAD"
 
 
@@ -377,7 +320,7 @@ class UserPdfLoader(CorpusLoader):
     def load(self, local: Path) -> Iterator[RawChunk]:
         try:
             from pypdf import PdfReader
-        except ImportError as exc:  # optional dep — surfaced as an actionable ingest error
+        except ImportError as exc:  # optional dep - surfaced as an actionable ingest error
             raise RuntimeError(
                 "PDF grounding needs the 'pypdf' package. Install it with: uv add pypdf"
             ) from exc
@@ -385,44 +328,14 @@ class UserPdfLoader(CorpusLoader):
         for i, pdf_page in enumerate(reader.pages, start=1):
             text = (pdf_page.extract_text() or "").strip()
             yield from chunk_text(
-                text, source=self.source, title=f"{self._label} — p.{i}", url=self._label, page=i
+                text, source=self.source, title=f"{self._label} - p.{i}", url=self._label, page=i
             )
 
 
 def loader_for_source(src) -> CorpusLoader:
-    """Build the right loader for a `GroundingSource` row (kind → loader)."""
+    """Build the right loader for a `GroundingSource` row (kind picks the loader)."""
     if src.kind == "github":
         return UserGithubLoader(source_key=src.source_key, repo_url=src.location)
     if src.kind == "pdf":
         return UserPdfLoader(source_key=src.source_key, pdf_path=src.location, label=src.label)
     raise ValueError(f"unknown grounding source kind: {src.kind}")
-
-
-# --- CLI ---------------------------------------------------------------------
-async def _run(sources: list[str], *, limit: int | None, reset: bool) -> None:
-    for name in sources:
-        loader = _LOADERS[name]
-        print(f"[grounding] ingesting {name} …")
-        count = await ingest_corpus(loader, limit=limit, reset=reset)
-        print(f"[grounding] {name}: embedded {count} new chunk(s)")
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Seed the grounding knowledge base into Qdrant.")
-    parser.add_argument(
-        "--sources",
-        nargs="*",
-        default=available_corpora(),
-        choices=available_corpora(),
-        help="Corpora to ingest (default: all registered).",
-    )
-    parser.add_argument("--limit", type=int, default=None, help="Max chunks per corpus (testing).")
-    parser.add_argument(
-        "--reset", action="store_true", help="Re-embed from scratch (drop this source's rows first)."
-    )
-    args = parser.parse_args()
-    asyncio.run(_run(args.sources, limit=args.limit, reset=args.reset))
-
-
-if __name__ == "__main__":
-    main()

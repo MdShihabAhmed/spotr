@@ -1,7 +1,7 @@
 """Pure text heuristics for problem-exclusion flags.
 
 Detect interactive / multiple-answer problems from the statement text. These flag
-problems the (future) stress-tester can't validate — an interactive problem has no
+problems the (future) stress-tester can't validate - an interactive problem has no
 fixed I/O, and a "print any" problem has no single ground-truth output. Kept as pure
 functions so they're trivially testable and reusable across sources.
 """

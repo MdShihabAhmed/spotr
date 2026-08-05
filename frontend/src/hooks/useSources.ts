@@ -17,7 +17,7 @@ const sourcesKey = ["grounding-sources"] as const;
 
 /** List grounding sources. Poll fast (2s) while a source is actively processing so its status +
  *  chunk count converge; poll slowly (30s) while one is only waiting on a scheduled retry (a
- *  quota wait can be ~24h — no point hammering); otherwise stop. */
+ *  quota wait can be ~24h - no point hammering); otherwise stop. */
 export function useSources() {
   return useQuery({
     queryKey: sourcesKey,

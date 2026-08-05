@@ -14,7 +14,7 @@ import { useProblem } from "../hooks/useProblems";
 import { useTutorSession } from "../hooks/useTutor";
 import { MathText } from "../components/MathText";
 
-// We generate ladder *content*, not titles, and the ladder length is dynamic — so the
+// We generate ladder *content*, not titles, and the ladder length is dynamic - so the
 // rung title is a role label derived from the rung's *position* in this problem's ladder,
 // not a fixed per-index map. First rung is always the nudge, last is always the solution.
 function levelTitle(lvl: number, count: number): string {
@@ -45,7 +45,7 @@ function useSessionColumns() {
           return { left: clampN(p.left, LEFT.min, LEFT.max), right: clampN(p.right, RIGHT.min, RIGHT.max) };
       }
     } catch {
-      /* corrupt/absent — fall back to defaults */
+      /* corrupt/absent - fall back to defaults */
     }
     return { left: LEFT.def, right: RIGHT.def };
   });
@@ -53,7 +53,7 @@ function useSessionColumns() {
     try {
       localStorage.setItem(COLS_KEY, JSON.stringify(cols));
     } catch {
-      /* private-mode / quota — layout just won't persist */
+      /* private-mode / quota - layout just won't persist */
     }
   }, [cols]);
   return {
@@ -304,7 +304,7 @@ function Vault({
             ? "Every level is open. The ladder is complete."
             : `Level${withheld.length > 1 ? "s" : ""} ${withheld.join(", ")} ${
                 withheld.length > 1 ? "are" : "is"
-              } never placed in the prompt — not the text, not the title.`}
+              } never placed in the prompt - not the text, not the title.`}
         </p>
       </div>
     </div>
@@ -450,7 +450,7 @@ export function SessionPage() {
     }
   }
 
-  // Not-ready / error states — a plain notice, not the three-column layout.
+  // Not-ready / error states - a plain notice, not the three-column layout.
   if (session.isPending || problem.isPending) {
     return <div className="plain-page"><p className="muted">Loading the session…</p></div>;
   }
@@ -458,7 +458,7 @@ export function SessionPage() {
     const code = session.error instanceof ApiError ? session.error.code : "";
     const msg =
       code === "no_levels"
-        ? "This problem has no hint ladder yet — add the editorial link on the add-problem page and re-ingest."
+        ? "This problem has no hint ladder yet - add the editorial link on the add-problem page and re-ingest."
         : code === "problem_not_ready"
           ? "This problem is still being ingested. It'll open as a session once it's ready."
           : code === "problem_not_found"
@@ -490,7 +490,7 @@ export function SessionPage() {
               {timeline.length === 0 && !streaming && (
                 <div className="msg msg-tutor">
                   What have you tried, or what's confusing? Tell me where you're stuck and we'll work
-                  from there — I won't hand you the answer.
+                  from there - I won't hand you the answer.
                 </div>
               )}
               {timeline.map((it, i) =>

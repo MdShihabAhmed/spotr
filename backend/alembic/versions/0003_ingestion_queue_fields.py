@@ -1,7 +1,7 @@
 """ingestion queue fields
 
 Adds durable-job-queue bookkeeping to `problems`: `claimed_at` (when a worker claimed the
-row — used for crash recovery) and `attempts` (claim count, caps retries). Also indexes
+row - used for crash recovery) and `attempts` (claim count, caps retries). Also indexes
 `ingestion_status` so a worker's `WHERE ingestion_status='pending' … FOR UPDATE SKIP LOCKED`
 claim stays cheap. See app/queue.py.
 

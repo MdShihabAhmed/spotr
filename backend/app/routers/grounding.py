@@ -1,15 +1,15 @@
-"""Grounding sources — "bring your own references".
+"""Grounding sources - "bring your own references".
 
 Users add a public GitHub repo or upload a PDF; a worker clones/parses/chunks/embeds it into
 the same Qdrant collection as the built-in corpora, so the tutor cites it like anything else.
-Self-hosted → the user is the admin: they must ack (`license_ack`) that it runs on their
+Self-hosted -> the user is the admin: they must ack (`license_ack`) that it runs on their
 machine + key and that they have the right to use it.
 
 Same durable-queue + LISTEN/NOTIFY-SSE shape as problem ingestion:
-- `POST /grounding/sources/github` | `POST /grounding/sources/pdf` — create + enqueue.
-- `GET /grounding/sources` — list (newest first).
-- `DELETE /grounding/sources/{id}` — remove its Qdrant points + chunk rows (+ the stored PDF).
-- `GET /grounding/sources/{id}/events` — live status SSE.
+- `POST /grounding/sources/github` | `POST /grounding/sources/pdf` - create + enqueue.
+- `GET /grounding/sources` - list (newest first).
+- `DELETE /grounding/sources/{id}` - remove its Qdrant points + chunk rows (+ the stored PDF).
+- `GET /grounding/sources/{id}/events` - live status SSE.
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ from app.vector_store import delete_source, get_qdrant
 router = APIRouter(prefix="/grounding", tags=["grounding"])
 
 _TERMINAL = {"ready", "failed"}
-_MAX_PDF_BYTES = 25 * 1024 * 1024  # 25 MB — a generous single-book cap
+_MAX_PDF_BYTES = 25 * 1024 * 1024  # 25 MB - a generous single-book cap
 
 
 def _slug(label: str) -> str:
@@ -137,7 +137,7 @@ async def add_pdf_source(
 
 @router.post("/sources/{source_id}/retry", response_model=GroundingSourceOut)
 async def retry_source(source_id: int, user: CurrentUser, db: DbSession, response: Response):
-    """Retry now — skip a scheduled wait. For a source that `failed` or is `retrying` (e.g. a
+    """Retry now - skip a scheduled wait. For a source that `failed` or is `retrying` (e.g. a
     network blip, or you've freed up quota and don't want to wait for the daily reset). Re-queues
     immediately with a fresh error-retry budget; ingestion resumes from what's already embedded."""
     src = await db.get(GroundingSource, source_id)
@@ -185,7 +185,7 @@ def _sse(data: dict) -> str:
 
 @router.get("/sources/{source_id}/events")
 async def source_events(source_id: int, user: CurrentUser, db: DbSession, request: Request):
-    """Live grounding-source status as SSE — mirrors the problem-events endpoint."""
+    """Live grounding-source status as SSE - mirrors the problem-events endpoint."""
     src = await db.get(GroundingSource, source_id)
     if src is None:
         raise ApiError(404, "source_not_found", "No grounding source with that id.")

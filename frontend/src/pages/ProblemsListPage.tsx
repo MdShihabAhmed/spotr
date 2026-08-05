@@ -5,7 +5,7 @@ import type { IngestionStatus } from "../lib/api";
 
 const PAGE_SIZE = 20;
 
-// Only surface a badge when the problem isn't a plain ready session — a ready one needs no
+// Only surface a badge when the problem isn't a plain ready session - a ready one needs no
 // annotation, it just opens.
 const STATUS_LABEL: Partial<Record<IngestionStatus, string>> = {
   pending: "queued",

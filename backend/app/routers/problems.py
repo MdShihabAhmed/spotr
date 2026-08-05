@@ -2,7 +2,7 @@
 
 `POST /problems/ingest` enqueues a durable job: it creates the `Problem` row (identity parsed
 from the URL by the chosen source), sets it `pending`, and returns immediately with the
-problem's **slug**. A separate worker (see `app/worker.py`) claims and processes it — the row
+problem's **slug**. A separate worker (see `app/worker.py`) claims and processes it - the row
 in Postgres *is* the queue, so the work survives an API restart or crash.
 
 Progress reaches the client two ways: `GET /problems/{slug}` for a one-shot status read, and
@@ -47,7 +47,7 @@ router = APIRouter(prefix="/problems", tags=["problems"])
 # Ingestion is finished (for good or ill) at these; anything else is still in flight.
 _TERMINAL_STATUSES = {"ready", "failed"}
 
-# Statuses that mean "still processing" — a re-ingest is a no-op returning the existing
+# Statuses that mean "still processing" - a re-ingest is a no-op returning the existing
 # row, so we never double-schedule the background task. `ready`/`failed` are terminal and
 # may be re-processed (see `ingest_problem`): `failed` always retries; `ready` retries only
 # when the payload brings an editorial the row doesn't have yet.
@@ -91,7 +91,7 @@ def _apply_content(problem: Problem, payload: ProblemIngest) -> None:
 async def normalize_input(payload: NormalizeRequest, user: CurrentUser):
     """Clean pasted text / a screenshot into structured `{statement, constraints,
     samples, limits}` for the user to review before ingesting. Synchronous (one LLM
-    call) so the user confirms the extraction — vision/paste can err."""
+    call) so the user confirms the extraction - vision/paste can err."""
     if not payload.text and not payload.images:
         raise ApiError(400, "empty_input", "Provide pasted text or a screenshot to normalize.")
     try:
@@ -126,7 +126,7 @@ async def ingest_problem(
     except ValueError as exc:
         raise ApiError(400, "invalid_problem_url", f"Not a valid problem URL: {exc}")
 
-    # Idempotency keyed on (source, external_id) — NOT the raw URL, which has two forms
+    # Idempotency keyed on (source, external_id) - NOT the raw URL, which has two forms
     # for the same Codeforces problem.
     existing = await db.scalar(
         select(Problem).where(
@@ -136,7 +136,7 @@ async def ingest_problem(
     )
     if existing is not None:
         if existing.ingestion_status in _IN_FLIGHT:
-            # Still queued/processing — don't re-enqueue; just report the current state.
+            # Still queued/processing - don't re-enqueue; just report the current state.
             response.status_code = 200
             return await _problem_out(db, existing)
 
@@ -229,7 +229,7 @@ def _sse(data: dict) -> str:
 
 @router.get("/{slug}/events")
 async def problem_events(slug: str, user: CurrentUser, db: DbSession, request: Request):
-    """Live ingestion status as Server-Sent Events — the push replacement for polling.
+    """Live ingestion status as Server-Sent Events - the push replacement for polling.
 
     Emits the current `{status, error}` immediately, then one frame per status change, and
     closes once the status is terminal (`ready`/`failed`). Changes are delivered by Postgres

@@ -37,7 +37,7 @@ export function useRegister() {
   const login = useLogin();
 
   return useMutation({
-    // /register returns the user, not a token — sign in straight after so the user
+    // /register returns the user, not a token - sign in straight after so the user
     // isn't bounced to a login form they just filled in.
     mutationFn: async ({ email, password }: { email: string; password: string }) => {
       await register(email, password);

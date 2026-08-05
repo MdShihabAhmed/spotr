@@ -1,11 +1,10 @@
 # Pinned so volume names (spotr_pgdata, …) don't silently change if the repo
-# directory is renamed — Compose otherwise derives the project name from it.
+# directory is renamed - Compose otherwise derives the project name from it.
 name: spotr
 
 # Full self-host stack: `docker compose up -d` builds and runs everything
 # (postgres + redis + qdrant + migrate + api + worker + frontend). BYOK: put your key in
-# backend/.env (OPENAI_API_KEY). The grounding corpus seed is a one-shot, opt-in step:
-#   docker compose --profile seed run --rm seed
+# backend/.env (OPENAI_API_KEY).
 #
 # Roles share one backend image; the compose `command` picks the role. DATABASE_URL/REDIS_URL/
 # QDRANT_URL are overridden here to the in-network service hostnames (backend/.env keeps the
@@ -49,7 +48,7 @@ services:
       - qdrant_data:/qdrant/storage
 
   # One-shot: apply Alembic migrations, then exit. api/worker wait for it to finish, so the
-  # schema is ready before either serves — and only one process ever runs migrations.
+  # schema is ready before either serves - and only one process ever runs migrations.
   migrate:
     build: ./backend
     env_file: ./backend/.env
@@ -73,6 +72,9 @@ services:
       CORS_ORIGINS: "http://localhost:8080,http://localhost:5173"
     ports:
       - "8000:8000"
+    volumes:
+      # Uploaded source files live here and must be shared with the worker that ingests them.
+      - corpora:/app/corpora
     depends_on:
       postgres:
         condition: service_healthy
@@ -97,6 +99,9 @@ services:
     environment:
       <<: *backend-env
     command: ["uv", "run", "python", "-m", "app.worker"]
+    volumes:
+      # Same source-file volume as the API, so the worker can read what was uploaded.
+      - corpora:/app/corpora
     depends_on:
       postgres:
         condition: service_healthy
@@ -114,30 +119,6 @@ services:
       - "8080:80"
     depends_on:
       - api
-
-  # Opt-in grounding seed: clone the openly-licensed corpora, chunk, embed, upsert to Qdrant.
-  # Not part of `up` (it needs an embeddings key and is a long one-shot). Run explicitly:
-  #   docker compose --profile seed run --rm seed
-  seed:
-    build: ./backend
-    profiles: ["seed"]
-    env_file: ./backend/.env
-    environment:
-      <<: *backend-env
-    command: ["uv", "run", "python", "-m", "app.ingestion.grounding"]
-    volumes:
-      - corpora:/app/corpora
-    depends_on:
-      postgres:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
-      qdrant:
-        condition: service_started
-
-# Judge0 is NOT included here: it requires privileged containers and ships its own
-# docker-compose (https://github.com/judge0/judge0). Run it separately if/when the deferred
-# stress-testing feature lands.
 
 volumes:
   pgdata:

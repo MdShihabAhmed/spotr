@@ -14,7 +14,7 @@ LEVELS = [
     (1, "SENTINEL_ONE: notice the array is sorted."),
     (2, "SENTINEL_TWO: the key observation is a two-pointer sweep."),
     (3, "SENTINEL_THREE: the approach is two pointers, O(n), correct because ..."),
-    (4, "SENTINEL_FOUR: full solution — l=0, r=n-1, move inward."),
+    (4, "SENTINEL_FOUR: full solution - l=0, r=n-1, move inward."),
 ]
 
 
@@ -54,7 +54,7 @@ def test_thread_never_includes_unrevealed_levels():
         problem_title="Two Pointers",
         statement="Given a sorted array, find a pair summing to X.",
         constraints="1 <= n <= 2e5",
-        revealed=[(1, LEVELS[0][1]), (2, LEVELS[1][1])],  # only rungs 1–2 unlocked
+        revealed=[(1, LEVELS[0][1]), (2, LEVELS[1][1])],  # only rungs 1-2 unlocked
         grounding=[],
         history=[("user", "hi"), ("assistant", "what do you notice?")],
         user_message="is it two pointers?",
@@ -125,9 +125,9 @@ async def test_reveal_is_sequential_then_exhausts(client, auth_headers, ready_sl
         body = r.json()
         assert body["level"] == expected
         assert body["content"] == LEVELS[expected - 1][1]
-        assert body["via"] == "manual"  # manual reveal → "opened"
+        assert body["via"] == "manual"  # manual reveal -> "opened"
         assert body["revealed_levels"] == list(range(1, expected + 1))
-    # All unlocked → the next reveal is rejected.
+    # All unlocked -> the next reveal is rejected.
     r = await client.post("/tutor/cf-1846C/reveal", headers=auth_headers)
     assert r.status_code == 409
     assert r.json()["code"] == "all_levels_revealed"
@@ -190,7 +190,7 @@ async def test_message_streams_tokens_persists_and_does_not_leak(
     async def no_unlock(*, user_message, target_hint):
         return DisclosureDecision(False, "not yet")
 
-    # The streaming turn opens its OWN session (not the request's) — point that maker at
+    # The streaming turn opens its OWN session (not the request's) - point that maker at
     # the test sqlite engine, since the real one is Postgres.
     monkeypatch.setattr("app.routers.tutor.async_session_maker", db_session_maker)
     monkeypatch.setattr("app.routers.tutor.stream_completion", _fake_stream(captured))
@@ -241,7 +241,7 @@ async def test_message_auto_unlocks_when_judge_demonstrates(
     events = _parse_sse(r.text)
     unlock = next(e for e in events if e["type"] == "unlock")
     assert unlock["level"] == 1
-    assert unlock["via"] == "chat"  # chat demonstration → "earned"
+    assert unlock["via"] == "chat"  # chat demonstration -> "earned"
     assert unlock["matched_message"] == "the array is sorted so we can sweep from both ends"
     done = next(e for e in events if e["type"] == "done")
     assert done["revealed_levels"] == [1]

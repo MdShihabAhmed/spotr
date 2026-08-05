@@ -2,9 +2,9 @@
 
 The user gives us a problem as **pasted text** (rendered-page copy-paste mangles LaTeX
 and line breaks in browser-dependent ways) or a **screenshot** (Gemini flash is
-multimodal — it reads *rendered* math and reconstructs it as `$$$…$$$` LaTeX, which is
+multimodal - it reads *rendered* math and reconstructs it as `$$$…$$$` LaTeX, which is
 strictly better than OCR). Either way we return clean `{statement, constraints, samples,
-limits}` for the user to review/edit before ingesting — normalization is interactive, not
+limits}` for the user to review/edit before ingesting - normalization is interactive, not
 a background guess, because vision/paste can err and the user should confirm.
 
 `chat_fn` is injectable so the parsing/validation is tested without a live LLM.
@@ -69,12 +69,12 @@ _SCHEMA: dict[str, Any] = {
 
 _SYSTEM = """\
 You extract a competitive-programming problem into clean, structured fields from a user's \
-pasted text or one or more screenshots (which may be consecutive parts of the SAME problem — \
+pasted text or one or more screenshots (which may be consecutive parts of the SAME problem - \
 stitch them together in order). Rules:
 - Reproduce the FULL problem statement faithfully. Do not summarize, solve, or add commentary.
 - Preserve all mathematics as Codeforces-style LaTeX delimited by triple dollars, e.g. \
 $$$n \\le 2 \\cdot 10^5$$$. Rendered copy-paste flattens math (e.g. "2⋅105" for $$$2 \\cdot 10^5$$$, \
-"∑i=lrai" for $$$\\sum_{i=l}^{r} a_i$$$) and breaks a line after every symbol — reconstruct the \
+"∑i=lrai" for $$$\\sum_{i=l}^{r} a_i$$$) and breaks a line after every symbol - reconstruct the \
 intended LaTeX and rejoin the sentences.
 - `statement`: the problem description ONLY (the prose before the Input/Output sections). \
 Do NOT include the Note section here.
@@ -86,7 +86,7 @@ If there is genuinely no such section, leave it an empty string.
 preserving exact whitespace/newlines. Do not put format descriptions here.
 - `note`: the "Note"/"Notes" section that explains the sample cases, verbatim (math preserved). \
 Empty string if there is none.
-- Do NOT transcribe or describe any images/figures/diagrams — omit them entirely; the user \
+- Do NOT transcribe or describe any images/figures/diagrams - omit them entirely; the user \
 supplies figures separately.
 - Fill `time_limit_ms` and `memory_limit_mb` if stated (e.g. "1.5 seconds" -> 1500), else null.
 - Return only the JSON object."""

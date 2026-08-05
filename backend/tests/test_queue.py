@@ -1,4 +1,4 @@
-"""Durable job-queue tests: enqueue → claim (FOR UPDATE SKIP LOCKED) → crash recovery, plus
+"""Durable job-queue tests: enqueue -> claim (FOR UPDATE SKIP LOCKED) -> crash recovery, plus
 the worker drain loop. Runs against sqlite; NOTIFY is no-op'd by the autouse conftest fixture,
 and `FOR UPDATE SKIP LOCKED` is silently ignored by the sqlite dialect."""
 
@@ -73,7 +73,7 @@ async def test_claim_is_fifo(db_session_maker):
 
 
 async def test_recover_requeues_stuck_job(db_session_maker):
-    # A job claimed long ago, still in-flight → its worker died; re-queue it.
+    # A job claimed long ago, still in-flight -> its worker died; re-queue it.
     stale = datetime.now(timezone.utc) - timedelta(seconds=3600)
     pid = await _add(
         db_session_maker,
@@ -94,7 +94,7 @@ async def test_recover_requeues_stuck_job(db_session_maker):
 
 
 async def test_recover_ignores_recently_claimed_job(db_session_maker):
-    # Claimed 5s ago — still legitimately running; must NOT be touched.
+    # Claimed 5s ago - still legitimately running; must NOT be touched.
     fresh = datetime.now(timezone.utc) - timedelta(seconds=5)
     pid = await _add(
         db_session_maker,
