@@ -27,6 +27,9 @@ export function Layout({ children }: { children: ReactNode }) {
             <NavLink to="/problems/new" className="nav-item">
               add problem
             </NavLink>
+            <NavLink to="/grounding" className="nav-item">
+              sources
+            </NavLink>
           </>
         ) : (
           <NavLink to="/" end className="nav-item">

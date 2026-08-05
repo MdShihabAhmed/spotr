@@ -47,9 +47,11 @@ Then it's **measured** by an adversarial eval (§6).
 unlocks the next rung automatically when your message shows you've figured it out — "✓ you
 figured out hint 2 yourself."
 
-**Grounded and cited.** Explanations draw on four openly-licensed corpora (CP-Algorithms,
-USACO Guide, CP Handbook, PyRival), retrieved semantically and cited inline — so guidance is
-credible and traceable, not hallucinated.
+**Grounded and cited — in references you trust.** Explanations draw on openly-licensed corpora
+(CP-Algorithms, USACO Guide, CP Handbook, PyRival), retrieved semantically and cited inline — so
+guidance is credible and traceable, not hallucinated. And you can **add your own**: point Spotr at
+a public GitHub repo or upload a PDF (your team's notes, a textbook, your snippet library) and it's
+chunked, embedded, and cited like any built-in corpus. Self-hosted, so it all stays on your machine.
 
 ---
 
@@ -275,3 +277,8 @@ Application code is MIT/Apache-style open source. The grounding corpora are **fe
 bundled**, and used under their own licenses — **CP-Algorithms** (CC BY-SA 4.0), **PyRival**
 (Apache-2.0), **USACO Guide** (CC BY-NC-SA 4.0, non-commercial), **CP Handbook** (free to use).
 Attribution is shown as a "Grounded by" credit; corpora are never redistributed.
+
+**User-added sources** (a GitHub repo or PDF you supply) are your responsibility: because Spotr
+is self-hosted, you're the admin, and the add-source form requires you to confirm you have the
+right to use what you add. Your sources are embedded into your own local Qdrant and never leave
+your machine.

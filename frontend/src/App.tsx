@@ -8,6 +8,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { ProblemsListPage } from "./pages/ProblemsListPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { SessionPage } from "./pages/SessionPage";
+import { SourcesPage } from "./pages/SourcesPage";
 import "./App.css";
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -38,6 +39,7 @@ function App() {
 
         <Route path="/" element={<Public><LandingPage /></Public>} />
         <Route path="/problems" element={<Protected><ProblemsListPage /></Protected>} />
+        <Route path="/grounding" element={<Protected><SourcesPage /></Protected>} />
         <Route path="/problems/new" element={<Protected><IngestPage /></Protected>} />
         <Route path="/problems/:slug" element={<Protected><SessionPage /></Protected>} />
         <Route path="/account" element={<Protected><AccountPage /></Protected>} />

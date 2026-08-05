@@ -356,6 +356,47 @@ export async function streamTutorMessage(
   }
 }
 
+// --- Grounding sources (bring your own references) ---------------------------
+export type GroundingSourceStatus = "pending" | "cloning" | "embedding" | "ready" | "failed";
+
+export type GroundingSource = {
+  id: number;
+  kind: "github" | "pdf";
+  label: string;
+  source_key: string;
+  location: string;
+  status: GroundingSourceStatus;
+  error: string | null;
+  chunk_count: number;
+  created_at: string;
+};
+
+export const listSources = () => api.get<{ items: GroundingSource[] }>("/grounding/sources");
+
+export const addGithubSource = (body: { label: string; repo_url: string; license_ack: boolean }) =>
+  api.post<GroundingSource>("/grounding/sources/github", body);
+
+/** PDF upload is multipart, so it bypasses the JSON `api` helper. */
+export async function addPdfSource(
+  file: File,
+  label: string,
+  licenseAck: boolean,
+): Promise<GroundingSource> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("label", label);
+  form.append("license_ack", String(licenseAck));
+  // No Content-Type header — the browser sets the multipart boundary itself.
+  const resp = await authorizedFetch("/grounding/sources/pdf", { method: "POST", body: form });
+  const body = await resp.json().catch(() => ({}));
+  if (!resp.ok)
+    throw new ApiError(resp.status, body.code ?? "unknown_error", body.detail ?? resp.statusText);
+  return body as GroundingSource;
+}
+
+export const deleteSource = (id: number) =>
+  apiFetch<void>(`/grounding/sources/${id}`, { method: "DELETE" });
+
 /** /login is form-encoded (OAuth2PasswordRequestForm), unlike every other endpoint. */
 export async function login(email: string, password: string): Promise<void> {
   const resp = await fetch(`${BASE_URL}/login`, {
