@@ -137,8 +137,8 @@ export type Problem = {
   ingestion_status: IngestionStatus;
   ingestion_error: string | null;
   created_at: string;
-  // Number of graduated ladder levels generated (0-4). Content is served one level at
-  // a time by the tutor's revealed-set flow, never all at once.
+  // Number of graduated ladder levels generated (varies by problem, typically 2-6). Content
+  // is served one level at a time by the tutor's revealed-set flow, never all at once.
   level_count: number;
 };
 

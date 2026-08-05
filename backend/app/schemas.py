@@ -114,8 +114,9 @@ class ProblemOut(BaseModel):
     ingestion_status: str
     ingestion_error: str | None
     created_at: datetime
-    # Number of ladder levels generated (0-4). Content is never exposed here - the
-    # tutor serves levels one at a time via the revealed-set disclosure flow (step 6).
+    # Number of ladder levels generated (varies by problem, typically 2-6; 0 if none yet).
+    # Content is never exposed here - the tutor serves levels one at a time via the
+    # revealed-set disclosure flow.
     level_count: int = 0
 
 

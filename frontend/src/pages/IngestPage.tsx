@@ -40,7 +40,7 @@ function Pipeline({ status, error, slug }: { status: IngestionStatus | null; err
       : status === "failed"
         ? null
         : status === "ready"
-          ? `${slug} is ready - four levels sealed.`
+          ? `${slug} is ready - the ladder is sealed.`
           : "Runs on the durable job queue on its own database session. A failure lands as a readable error, never a crash.";
 
   return (

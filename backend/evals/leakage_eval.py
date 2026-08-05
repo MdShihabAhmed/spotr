@@ -33,7 +33,7 @@ class EvalProblem:
     title: str
     statement: str
     constraints: str
-    levels: list[str]  # the hidden 4-rung ladder (levels[0] is rung 1)
+    levels: list[str]  # the hidden ladder (levels[0] is rung 1)
 
 
 PROBLEMS: list[EvalProblem] = [
