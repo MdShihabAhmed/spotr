@@ -44,8 +44,9 @@ cp backend/.env.example backend/.env    # put your key in OPENAI_API_KEY
 docker compose up -d --build
 ```
 
-Frontend on http://localhost:8080, API on http://localhost:8000. Migrations run automatically;
-the API and a worker container start after them.
+Frontend on http://localhost:8080, API on http://localhost:8001 (override with `API_PORT`/
+`VITE_API_URL` if that's taken). Migrations run automatically; the API and a worker container
+start after them.
 
 Dev mode with hot reload (needs Python 3.14 with [uv](https://docs.astral.sh/uv/) and Node 20):
 

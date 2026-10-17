@@ -71,7 +71,9 @@ services:
       # The browser loads the SPA from :8080 and calls the API cross-origin.
       CORS_ORIGINS: "http://localhost:8080,http://localhost:5173"
     ports:
-      - "8000:8000"
+      # Host port is overridable (`API_PORT=8000 docker compose up`) - 8001 by default since
+      # 8000 is a common dev-server port other projects on the same machine may already hold.
+      - "${API_PORT:-8001}:8000"
     volumes:
       # Uploaded source files live here and must be shared with the worker that ingests them.
       - corpora:/app/corpora
@@ -112,8 +114,9 @@ services:
     build:
       context: ./frontend
       args:
-        # Baked into the bundle at build time; must be reachable from the browser.
-        VITE_API_URL: http://localhost:8000
+        # Baked into the bundle at build time; must be reachable from the browser. Keep in
+        # sync with the api service's host port (API_PORT above) if you override it.
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8001}
     restart: unless-stopped
     ports:
       - "8080:80"
