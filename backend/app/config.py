@@ -65,6 +65,10 @@ class Settings(BaseSettings):
     grounding_collection_prefix: str = "grounding"
     embedding_dim: int = 3072
     embedding_batch_size: int = 32  # texts per embeddings API call (free-tier friendly)
+    # A 429 mid-ingest is usually a per-minute limit: sit out a full window and retry the batch
+    # this many times before treating it as the daily cap (the 24h wait below).
+    embedding_ratelimit_pause_seconds: int = 65
+    embedding_ratelimit_pauses: int = 5
     # Where cloned repos and uploaded source files are cached locally.
     corpora_dir: str = "./corpora"
     grounding_top_k: int = 4  # chunks retrieved per tutor turn

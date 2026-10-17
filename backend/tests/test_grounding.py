@@ -171,3 +171,132 @@ def _loader():
     from app.ingestion.grounding import UserGithubLoader
 
     return UserGithubLoader(source_key="docs", repo_url="https://github.com/x/y")
+
+
+MDX = """---
+id: two-pointers
+title: 'Two Pointers'
+---
+
+## Resources
+
+<Resources>
+\t<Resource
+\t\tsource="CF EDU"
+\t\ttitle="Two Pointers Method"
+\t>
+\t\tvideo explanation of two pointers
+\t</Resource>
+</Resources>
+
+## Sum of Two Values
+
+<FocusProblem problem="sample1" />
+
+Move l right when the sum is too small and r left when it is too big.
+
+```cpp
+#include <vector>
+vector<pair<int, int>> nums(n);
+```
+"""
+
+
+def test_mdx_lesson_chunks_as_markdown_without_component_tags():
+    from app.ingestion.grounding import strip_mdx
+
+    stripped = strip_mdx(MDX)
+    assert "<Resource" not in stripped and "<FocusProblem" not in stripped
+    assert 'source="CF EDU"' not in stripped  # props of a multi-line tag go with it
+    assert "video explanation of two pointers" in stripped  # text between tags stays
+
+    chunks = chunk_markdown(stripped, source="usaco", url="https://x/Two_Pointers.mdx")
+    by_title = {c.title: c.content for c in chunks}
+    # No H1 in MDX lessons, so the front matter title names the document. (The Resources
+    # section is too short once its tags are gone, so the usual minimum drops it.)
+    assert set(by_title) == {"Two Pointers - Sum of Two Values"}
+    body = by_title["Two Pointers - Sum of Two Values"]
+    # Fenced code keeps its angle brackets untouched.
+    assert "#include <vector>" in body and "vector<pair<int, int>>" in body
+
+
+def test_github_loader_reads_mdx_and_skips_tooling(tmp_path):
+    from app.ingestion.grounding import UserGithubLoader
+
+    (tmp_path / "content").mkdir()
+    (tmp_path / "content" / "Two_Pointers.mdx").write_text(MDX)
+    (tmp_path / ".storybook").mkdir()
+    (tmp_path / ".storybook" / "main.py").write_text("x = 1\n" * 40)
+    (tmp_path / "next.config.ts").write_text("export default {}\n" * 20)
+    (tmp_path / "algo.cpp").write_text("int main() { return 0; }\n" * 10)
+
+    loader = UserGithubLoader(source_key="usaco", repo_url="https://github.com/o/r")
+    urls = {c.url for c in loader.load(tmp_path)}
+    assert urls == {
+        "https://github.com/o/r/blob/HEAD/content/Two_Pointers.mdx",
+        "https://github.com/o/r/blob/HEAD/algo.cpp",
+    }
+
+
+def test_broken_clone_is_recloned(tmp_path, monkeypatch):
+    """A dir left by an interrupted clone fails `git pull`; it must be re-cloned, not reused."""
+    import subprocess
+
+    from app.ingestion import grounding
+
+    loader = grounding.UserGithubLoader(source_key="usaco", repo_url="https://github.com/o/r")
+    dest = tmp_path / "usaco"
+    (dest / ".git").mkdir(parents=True)
+    monkeypatch.setattr(loader, "local_dir", lambda: dest)
+    calls = []
+
+    def fake_run(cmd, check):
+        calls.append(cmd[1])
+        if cmd[1] == "clone":
+            assert not dest.exists()  # the broken dir was removed first
+            dest.mkdir()
+        return subprocess.CompletedProcess(cmd, 0 if cmd[1] == "clone" else 128)
+
+    monkeypatch.setattr(grounding.subprocess, "run", fake_run)
+    assert loader.ensure_local() == dest
+    assert calls == ["-C", "clone"]
+
+
+async def test_per_minute_rate_limit_is_waited_out_not_raised(db_session_maker, qdrant):
+    """A couple of 429s (a per-minute window) pause and retry the same batch; the run finishes."""
+    from app.llm import LLMRateLimitError
+
+    inner, failures, pauses = fake_embed(), [2], []
+
+    async def flaky(texts):
+        if failures[0]:
+            failures[0] -= 1
+            raise LLMRateLimitError("429")
+        return await inner(texts)
+
+    async def no_sleep(seconds):
+        pauses.append(seconds)
+
+    embedded = await ingest_corpus(
+        _loader(), session_maker=db_session_maker, client=qdrant,
+        embed_fn=flaky, chunks=iter(CHUNKS), sleep=no_sleep,
+    )
+    assert embedded == len(CHUNKS)
+    assert pauses == [get_settings().embedding_ratelimit_pause_seconds] * 2
+
+
+async def test_persistent_rate_limit_propagates_for_the_long_wait(db_session_maker, qdrant):
+    """A daily cap fails every pause, so it still reaches the caller's 24h reschedule."""
+    from app.llm import LLMRateLimitError
+
+    async def capped(texts):
+        raise LLMRateLimitError("429")
+
+    async def no_sleep(seconds):
+        pass
+
+    with pytest.raises(LLMRateLimitError):
+        await ingest_corpus(
+            _loader(), session_maker=db_session_maker, client=qdrant,
+            embed_fn=capped, chunks=iter(CHUNKS), sleep=no_sleep,
+        )
