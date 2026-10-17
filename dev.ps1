@@ -15,7 +15,7 @@ $frontend = Join-Path $root 'frontend'
 # cmd /k keeps each pane open after the process exits, so a crash leaves its
 # error on screen instead of vanishing. Ctrl+C stops the service and drops you
 # at a prompt in the same pane.
-$backendCmd  = 'uv run uvicorn app.main:app --reload --port 8000'
+$backendCmd  = 'uv run uvicorn app.main:app --reload --port 8001'
 $frontendCmd = 'npm run dev'
 $infraCmd    = 'docker compose up'
 

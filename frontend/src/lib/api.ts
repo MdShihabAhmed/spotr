@@ -1,6 +1,6 @@
 import { tokens } from "./auth";
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8001";
 
 /** Mirrors the backend's {detail, code} error schema so callers branch on `code`. */
 export class ApiError extends Error {

@@ -1,3 +1,3 @@
 infra: docker compose up
-backend: uv run --directory backend uvicorn app.main:app --reload --port 8000
+backend: uv run --directory backend uvicorn app.main:app --reload --port 8001
 frontend: npm --prefix frontend run dev
